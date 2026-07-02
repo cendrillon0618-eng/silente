@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0A0D15">
+<title>Silente</title>
+<style>
+:root{
+  --bg:#0A0D15; --surface:#131826; --surface2:#1A2133;
+  --line:#242D42; --text:#E5E9F2; --sub:#8792A8;
+  --accent:#C8B27E; --user-bubble:#1C2A45; --danger:#C97B7B;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+  --sans:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.75}
+button{font-family:var(--sans);border:none;background:none;color:inherit;cursor:pointer;font-size:15px}
+textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
+
+#app{display:flex;flex-direction:column;height:100dvh}
+
+/* ===== header ===== */
+#topbar{
+  display:flex;align-items:center;gap:10px;
+  padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;
+  border-bottom:1px solid var(--line);background:rgba(10,13,21,.92);
+  backdrop-filter:blur(12px);position:relative;z-index:5;
+}
+#btnMenu,#btnGear{width:38px;height:38px;display:flex;align-items:center;justify-content:center;color:var(--sub);flex:none;border-radius:10px}
+#btnMenu:active,#btnGear:active{background:var(--surface)}
+#titleWrap{flex:1;min-width:0;text-align:center}
+#appName{font-family:var(--serif);font-size:11px;letter-spacing:.35em;color:var(--accent);text-transform:uppercase}
+#convoTitle{font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#moon{width:14px;height:14px;border-radius:50%;flex:none;
+  background:radial-gradient(circle at 35% 35%, #2A3350 0%, #1A2133 70%);
+  border:1px solid var(--line);position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 2px);opacity:0}
+#moon.on{opacity:1;animation:phase 2.4s ease-in-out infinite}
+@keyframes phase{
+  0%{background:radial-gradient(circle at 100% 50%, #E9DFC4 0%, #1A2133 45%)}
+  50%{background:radial-gradient(circle at 50% 50%, #E9DFC4 0%, #E9DFC4 55%, #1A2133 90%)}
+  100%{background:radial-gradient(circle at 0% 50%, #E9DFC4 0%, #1A2133 45%)}
+}
+
+/* ===== chat ===== */
+#chat{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 16px 8px}
+.msg{margin-bottom:22px;max-width:100%}
+.msg .role{font-family:var(--serif);font-size:11px;letter-spacing:.25em;color:var(--sub);margin-bottom:6px}
+.msg.user{display:flex;flex-direction:column;align-items:flex-end}
+.msg.user .body{
+  background:var(--user-bubble);border:1px solid var(--line);
+  border-radius:16px 16px 4px 16px;padding:10px 14px;max-width:88%;
+  white-space:pre-wrap;word-break:break-word}
+.msg.assistant .body{white-space:pre-wrap;word-break:break-word;padding-right:4px}
+.msg .tools{display:flex;gap:14px;margin-top:8px}
+.msg .tools button{font-size:12px;color:var(--sub);padding:4px 2px}
+.msg .tools button:active{color:var(--accent)}
+.errnote{background:rgba(201,123,123,.1);border:1px solid rgba(201,123,123,.35);
+  color:var(--danger);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:22px}
+.errnote button{color:var(--danger);text-decoration:underline;margin-top:6px;font-size:14px}
+#empty{color:var(--sub);text-align:center;margin-top:26vh;font-family:var(--serif)}
+#empty .big{font-size:22px;letter-spacing:.4em;color:var(--accent);margin-bottom:10px}
+#empty .small{font-size:13px;letter-spacing:.1em}
+
+/* ===== input ===== */
+#inputbar{
+  display:flex;align-items:flex-end;gap:10px;
+  padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);
+  border-top:1px solid var(--line);background:rgba(10,13,21,.92);backdrop-filter:blur(12px)}
+#ta{
+  flex:1;resize:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:18px;padding:11px 14px;max-height:160px;line-height:1.6;outline:none}
+#ta:focus{border-color:#37456B}
+#btnSend{
+  width:42px;height:42px;flex:none;border-radius:50%;
+  background:var(--accent);color:#0A0D15;display:flex;align-items:center;justify-content:center;font-size:18px}
+#btnSend:disabled{background:var(--surface2);color:var(--sub)}
+#btnSend.stop{background:var(--danger);color:#0A0D15}
+
+/* ===== drawer ===== */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10;opacity:0;pointer-events:none;transition:opacity .22s}
+#overlay.on{opacity:1;pointer-events:auto}
+#drawer{
+  position:fixed;top:0;left:0;bottom:0;width:82%;max-width:330px;z-index:11;
+  background:var(--surface);border-right:1px solid var(--line);
+  transform:translateX(-102%);transition:transform .24s ease;
+  display:flex;flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 18px) 0 calc(env(safe-area-inset-bottom) + 12px)}
+#drawer.on{transform:translateX(0)}
+#drawer h2{font-family:var(--serif);font-size:13px;letter-spacing:.4em;color:var(--accent);padding:0 20px 14px}
+#btnNew{
+  margin:0 16px 14px;padding:12px;border:1px solid var(--line);border-radius:14px;
+  color:var(--text);text-align:center;background:var(--surface2)}
+#btnNew:active{border-color:var(--accent)}
+#convoList{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.convoItem{display:flex;align-items:center;padding:13px 8px 13px 20px;border-bottom:1px solid rgba(36,45,66,.5)}
+.convoItem .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.convoItem.cur .name{color:var(--accent)}
+.convoItem .del{width:40px;height:40px;color:var(--sub);flex:none;font-size:15px}
+#drawerFoot{padding:12px 16px 0;display:flex;flex-direction:column;gap:10px}
+#drawerFoot button{
+  padding:12px;border:1px solid var(--line);border-radius:14px;text-align:left;padding-left:16px;color:var(--sub)}
+#drawerFoot button:active{color:var(--accent)}
+
+/* ===== sheet(modal) ===== */
+#sheetWrap{position:fixed;inset:0;z-index:20;display:none}
+#sheetWrap.on{display:block}
+#sheetBg{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+#sheet{
+  position:absolute;left:0;right:0;bottom:0;max-height:88dvh;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--line);
+  padding:18px 18px calc(env(safe-area-inset-bottom) + 22px)}
+#sheet h3{font-family:var(--serif);font-size:14px;letter-spacing:.35em;color:var(--accent);margin-bottom:18px;text-align:center}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;color:var(--sub);margin-bottom:6px;letter-spacing:.08em}
+.field input[type=text],.field input[type=password],.field input[type=number],.field select,.field textarea{
+  width:100%;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 13px;outline:none}
+.field textarea{min-height:110px;resize:vertical;line-height:1.6}
+.rowBtns{display:flex;gap:10px;margin-top:6px}
+.rowBtns button{
+  flex:1;padding:13px;border-radius:14px;border:1px solid var(--line);color:var(--text);background:var(--surface2)}
+.rowBtns button.primary{background:var(--accent);color:#0A0D15;border-color:var(--accent)}
+.rowBtns button.danger{color:var(--danger);border-color:rgba(201,123,123,.4)}
+.hint{font-size:12px;color:var(--sub);line-height:1.6;margin-top:6px}
+
+/* knowledge list */
+.kItem{display:flex;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid rgba(36,45,66,.5)}
+.kItem .kName{flex:1;min-width:0}
+.kItem .kName .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.kItem .kName .c{font-size:11px;color:var(--sub)}
+.toggle{width:46px;height:27px;border-radius:14px;background:var(--surface2);border:1px solid var(--line);position:relative;flex:none;transition:background .18s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:var(--sub);transition:all .18s}
+.toggle.on{background:rgba(200,178,126,.25);border-color:var(--accent)}
+.toggle.on::after{left:21px;background:var(--accent)}
+.kItem .edit{color:var(--sub);width:40px;height:40px;flex:none}
+#kAdd{width:100%;margin-top:14px;padding:13px;border:1px dashed var(--line);border-radius:14px;color:var(--sub)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <button id="btnMenu" aria-label="メニュー">
+      <svg width="20" height="20" viewBox="0 0 20 20"><path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <div id="titleWrap">
+      <div id="appName">Silente</div>
+      <div id="convoTitle">新しい会話</div>
+    </div>
+    <div id="moon"></div>
+    <button id="btnGear" aria-label="設定">
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M15.8 4.2l-1.7 1.7M5.9 14.1l-1.7 1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <div id="chat"></div>
+
+  <div id="inputbar">
+    <textarea id="ta" rows="1" placeholder="メッセージ…"></textarea>
+    <button id="btnSend" aria-label="送信">↑</button>
+  </div>
+</div>
+
+<div id="overlay"></div>
+<div id="drawer">
+  <h2>SILENTE</h2>
+  <button id="btnNew">＋ 新しい会話</button>
+  <div id="convoList"></div>
+  <div id="drawerFoot">
+    <button id="btnKnowledge">📁 ナレッジ</button>
+    <button id="btnSettings">⚙ 設定</button>
+  </div>
+</div>
+
+<div id="sheetWrap">
+  <div id="sheetBg"></div>
+  <div id="sheet"></div>
+</div>
+
+<script>
+"use strict";
+/* ============ state ============ */
+const LSKEY = "silente_v1";
+const MODELS = [
+  ["claude-fable-5","Fable 5（最高性能）"],
+  ["claude-opus-4-8","Opus 4.8"],
+  ["claude-opus-4-7","Opus 4.7"],
+  ["claude-opus-4-6","Opus 4.6"],
+  ["claude-sonnet-4-6","Sonnet 4.6（バランス）"],
+  ["claude-haiku-4-5-20251001","Haiku 4.5（速い・安い）"]
+];
+let S = load();
+function defaults(){
+  return {
+    apiKey:"", model:"claude-sonnet-4-6", maxTokens:4096,
+    systemPrompt:"", knowledge:[], convos:[], currentId:null
+  };
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(LSKEY);
+    if(!raw) return defaults();
+    return Object.assign(defaults(), JSON.parse(raw));
+  }catch(e){ return defaults(); }
+}
+function save(){
+  try{ localStorage.setItem(LSKEY, JSON.stringify(S)); }
+  catch(e){ alert("保存に失敗しました。ストレージ容量を確認してね。"); }
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function cur(){ return S.convos.find(c=>c.id===S.currentId) || null; }
+
+/* ============ dom ============ */
+const $ = s => document.querySelector(s);
+const chatEl=$("#chat"), taEl=$("#ta"), sendBtn=$("#btnSend"),
+      drawerEl=$("#drawer"), overlayEl=$("#overlay"),
+      sheetWrap=$("#sheetWrap"), sheetEl=$("#sheet"),
+      moonEl=$("#moon"), convoTitleEl=$("#convoTitle");
+
+let streaming=false, aborter=null;
+
+/* ============ conversation ============ */
+function newConvo(){
+  const c={id:uid(), title:"新しい会話", messages:[], updated:Date.now()};
+  S.convos.unshift(c); S.currentId=c.id; save();
+  renderAll(); closeDrawer();
+}
+function switchConvo(id){
+  S.currentId=id; save(); renderAll(); closeDrawer();
+}
+function deleteConvo(id){
+  const c=S.convos.find(x=>x.id===id);
+  if(!confirm(`「${c?c.title:""}」を削除する？`)) return;
+  S.convos=S.convos.filter(x=>x.id!==id);
+  if(S.currentId===id) S.currentId=S.convos.length?S.convos[0].id:null;
+  save(); renderAll();
+}
+function renameConvo(){
+  const c=cur(); if(!c) return;
+  const t=prompt("会話のタイトル", c.title);
+  if(t&&t.trim()){ c.title=t.trim(); save(); renderAll(); }
+}
+
+/* ============ render ============ */
+function renderAll(){ renderTitle(); renderChat(); renderDrawer(); }
+function renderTitle(){
+  const c=cur();
+  convoTitleEl.textContent = c ? c.title : "新しい会話";
+}
+function renderDrawer(){
+  const list=$("#convoList"); list.innerHTML="";
+  S.convos.forEach(c=>{
+    const div=document.createElement("div");
+    div.className="convoItem"+(c.id===S.currentId?" cur":"");
+    const name=document.createElement("div");
+    name.className="name"; name.textContent=c.title;
+    name.onclick=()=>switchConvo(c.id);
+    const del=document.createElement("button");
+    del.className="del"; del.textContent="✕";
+    del.onclick=e=>{ e.stopPropagation(); deleteConvo(c.id); };
+    div.append(name,del); list.append(div);
+  });
+}
+function renderChat(){
+  chatEl.innerHTML="";
+  const c=cur();
+  if(!c || c.messages.length===0){
+    const d=document.createElement("div");
+    d.id="empty";
+    d.innerHTML='<div class="big">LUCE SILENTE</div><div class="small">静かな光の下で、はじめよう</div>';
+    chatEl.append(d);
+    return;
+  }
+  c.messages.forEach((m,i)=>chatEl.append(msgEl(m,i)));
+  scrollBottom();
+}
+function msgEl(m,idx){
+  const wrap=document.createElement("div");
+  wrap.className="msg "+m.role;
+  const role=document.createElement("div");
+  role.className="role";
+  role.textContent = m.role==="user" ? "" : "CLAUDE";
+  const body=document.createElement("div");
+  body.className="body"; body.textContent=m.content;
+  wrap.append(role,body);
+  if(m.role==="assistant"){
+    const tools=document.createElement("div"); tools.className="tools";
+    const cp=document.createElement("button"); cp.textContent="コピー";
+    cp.onclick=()=>{ navigator.clipboard.writeText(m.content).then(()=>{cp.textContent="✓ コピー済"; setTimeout(()=>cp.textContent="コピー",1500);}); };
+    tools.append(cp);
+    const c=cur();
+    if(c && idx===c.messages.length-1 && !streaming){
+      const rg=document.createElement("button"); rg.textContent="再生成";
+      rg.onclick=regenerate;
+      tools.append(rg);
+    }
+    wrap.append(tools);
+  }
+  return wrap;
+}
+function scrollBottom(){ chatEl.scrollTop = chatEl.scrollHeight; }
+function showError(msg, retryFn){
+  const d=document.createElement("div"); d.className="errnote";
+  d.textContent=msg;
+  if(retryFn){
+    const b=document.createElement("button"); b.textContent="もう一度試す";
+    b.onclick=()=>{ d.remove(); retryFn(); };
+    d.append(document.createElement("br"), b);
+  }
+  chatEl.append(d); scrollBottom();
+}
+
+/* ============ API ============ */
+function buildSystem(){
+  let sys = (S.systemPrompt||"").trim();
+  const on = S.knowledge.filter(k=>k.on);
+  if(on.length){
+    sys += "\n\n以下は参照資料（キャラクター設定・世界観など）。執筆・応答の際は忠実に従うこと。\n";
+    on.forEach(k=>{ sys += `\n===【${k.title}】===\n${k.text}\n`; });
+  }
+  return sys.trim();
+}
+async function callAPI(){
+  const c=cur(); if(!c) return;
+  if(!S.apiKey){ showError("APIキーが未設定だよ。設定から入れてね。"); openSettings(); return; }
+
+  streaming=true; setStreamUI(true);
+  const asMsg={role:"assistant",content:""};
+  const el=msgEl(asMsg,-1); chatEl.append(el);
+  const bodyEl=el.querySelector(".body");
+  const emptyEl=$("#empty"); if(emptyEl) emptyEl.remove();
+  scrollBottom();
+
+  aborter=new AbortController();
+  let ok=false, errText="";
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      signal:aborter.signal,
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":S.apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify({
+        model:S.model,
+        max_tokens:Number(S.maxTokens)||4096,
+        stream:true,
+        system:buildSystem()||undefined,
+        messages:c.messages.map(m=>({role:m.role,content:m.content}))
+      })
+    });
+    if(!res.ok){
+      let j=null; try{ j=await res.json(); }catch(e){}
+      const t=(j&&j.error&&j.error.message)||("HTTP "+res.status);
+      if(res.status===401) errText="認証エラー：APIキーを確認してね（"+t+"）";
+      else if(res.status===429) errText="レート上限に到達。少し待ってから再試行してね。";
+      else if(res.status===400) errText="リクエストエラー："+t;
+      else errText="エラー："+t;
+      throw new Error(errText);
+    }
+    const reader=res.body.getReader();
+    const dec=new TextDecoder();
+    let buf="";
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split("\n");
+      buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith("data:")) continue;
+        const data=line.slice(5).trim();
+        if(!data) continue;
+        let ev; try{ ev=JSON.parse(data); }catch(e){ continue; }
+        if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="text_delta"){
+          asMsg.content+=ev.delta.text;
+          bodyEl.textContent=asMsg.content;
+          scrollBottom();
+        }else if(ev.type==="error"){
+          throw new Error("APIエラー："+(ev.error&&ev.error.message||""));
+        }
+      }
+    }
+    ok=true;
+  }catch(e){
+    if(e.name==="AbortError"){ ok=asMsg.content.length>0; }
+    else{
+      el.remove();
+      showError(errText||("通信エラー："+e.message), callAPI);
+    }
+  }finally{
+    streaming=false; setStreamUI(false); aborter=null;
+    if(ok && asMsg.content){
+      c.messages.push(asMsg);
+      c.updated=Date.now();
+      if(c.title==="新しい会話"){
+        const first=c.messages.find(m=>m.role==="user");
+        if(first) c.title=first.content.slice(0,18)+(first.content.length>18?"…":"");
+      }
+      save(); renderAll();
+    }else if(!ok){
+      save();
+    }
+  }
+}
+function send(){
+  if(streaming){ if(aborter) aborter.abort(); return; }
+  const text=taEl.value.trim();
+  if(!text) return;
+  let c=cur();
+  if(!c){ c={id:uid(),title:"新しい会話",messages:[],updated:Date.now()}; S.convos.unshift(c); S.currentId=c.id; }
+  c.messages.push({role:"user",content:text});
+  c.updated=Date.now(); save();
+  taEl.value=""; taEl.style.height="auto";
+  renderChat(); renderTitle(); renderDrawer();
+  callAPI();
+}
+function regenerate(){
+  const c=cur(); if(!c||streaming) return;
+  if(c.messages.length && c.messages[c.messages.length-1].role==="assistant"){
+    c.messages.pop(); save(); renderChat();
+  }
+  callAPI();
+}
+function setStreamUI(on){
+  moonEl.classList.toggle("on",on);
+  sendBtn.classList.toggle("stop",on);
+  sendBtn.textContent = on ? "■" : "↑";
+}
+
+/* ============ drawer ============ */
+function openDrawer(){ drawerEl.classList.add("on"); overlayEl.classList.add("on"); }
+function closeDrawer(){ drawerEl.classList.remove("on"); overlayEl.classList.remove("on"); }
+
+/* ============ sheets ============ */
+function openSheet(html){ sheetEl.innerHTML=html; sheetWrap.classList.add("on"); }
+function closeSheet(){ sheetWrap.classList.remove("on"); sheetEl.innerHTML=""; }
+
+function openSettings(){
+  closeDrawer();
+  const opts=MODELS.map(([v,l])=>`<option value="${v}" ${S.model===v?"selected":""}>${l}</option>`).join("");
+  openSheet(`
+    <h3>設定</h3>
+    <div class="field"><label>APIキー</label>
+      <input type="password" id="fKey" value="${escAttr(S.apiKey)}" placeholder="sk-ant-...">
+      <div class="hint">この端末のブラウザ内にだけ保存されます。</div>
+    </div>
+    <div class="field"><label>モデル</label><select id="fModel">${opts}</select></div>
+    <div class="field"><label>最大出力トークン</label>
+      <input type="number" id="fMax" value="${S.maxTokens}" min="256" max="16384" step="256"></div>
+    <div class="field"><label>システムプロンプト（共通）</label>
+      <textarea id="fSys" placeholder="常に適用する指示…">${esc(S.systemPrompt)}</textarea></div>
+    <div class="rowBtns">
+      <button id="fSave" class="primary">保存</button>
+      <button id="fClose">閉じる</button>
+    </div>
+    <div class="field" style="margin-top:24px"><label>バックアップ</label>
+      <div class="rowBtns">
+        <button id="fExport">書き出し</button>
+        <button id="fImport">読み込み</button>
+      </div>
+      <div class="hint">iOSは長期間使わないとブラウザデータを消すことがあるので、ときどき書き出しておくのがおすすめ。会話・ナレッジ・設定がJSONで保存されます（APIキーも含むので取り扱い注意）。</div>
+      <input type="file" id="fFile" accept="application/json" style="display:none">
+    </div>
+  `);
+  $("#fSave").onclick=()=>{
+    S.apiKey=$("#fKey").value.trim();
+    S.model=$("#fModel").value;
+    S.maxTokens=Number($("#fMax").value)||4096;
+    S.systemPrompt=$("#fSys").value;
+    save(); closeSheet();
+  };
+  $("#fClose").onclick=closeSheet;
+  $("#fExport").onclick=exportData;
+  $("#fImport").onclick=()=>$("#fFile").click();
+  $("#fFile").onchange=importData;
+}
+
+function exportData(){
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  const d=new Date();
+  a.download=`silente-backup-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}.json`;
+  document.body.append(a); a.click(); a.remove();
+}
+function importData(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      if(!data.convos && !data.knowledge) throw new Error("形式が違う");
+      if(!confirm("現在のデータをバックアップの内容で置き換える？")) return;
+      S=Object.assign(defaults(),data); save(); renderAll(); closeSheet();
+      alert("読み込み完了✨");
+    }catch(err){ alert("読み込みに失敗："+err.message); }
+  };
+  r.readAsText(f);
+}
+
+/* ============ knowledge ============ */
+function openKnowledge(){
+  closeDrawer();
+  const items=S.knowledge.map(k=>`
+    <div class="kItem" data-id="${k.id}">
+      <div class="kName" data-act="edit">
+        <div class="t">${esc(k.title)}</div>
+        <div class="c">${k.text.length.toLocaleString()} 文字</div>
+      </div>
+      <div class="toggle ${k.on?"on":""}" data-act="toggle"></div>
+      <button class="edit" data-act="del">✕</button>
+    </div>`).join("");
+  openSheet(`
+    <h3>ナレッジ</h3>
+    <div class="hint" style="margin-bottom:10px">ONのものだけがシステムプロンプトに注入されます。キャラOS・世界観・夜プロンプトなどを登録して、必要な時だけONに。長文をONにするほど1回あたりのコストが上がる点だけ注意。</div>
+    <div id="kList">${items || '<div class="hint">まだ何も登録されていません。</div>'}</div>
+    <button id="kAdd">＋ 新しいナレッジを追加</button>
+    <div class="rowBtns" style="margin-top:14px"><button id="kClose">閉じる</button></div>
+  `);
+  $("#kClose").onclick=closeSheet;
+  $("#kAdd").onclick=()=>editKnowledge(null);
+  $("#kList").onclick=e=>{
+    const item=e.target.closest(".kItem"); if(!item) return;
+    const id=item.dataset.id;
+    const act=e.target.closest("[data-act]");
+    if(!act) return;
+    const k=S.knowledge.find(x=>x.id===id);
+    if(act.dataset.act==="toggle"){ k.on=!k.on; save(); openKnowledge(); }
+    else if(act.dataset.act==="del"){
+      if(confirm(`「${k.title}」を削除する？`)){ S.knowledge=S.knowledge.filter(x=>x.id!==id); save(); openKnowledge(); }
+    }
+    else if(act.dataset.act==="edit"){ editKnowledge(id); }
+  };
+}
+function editKnowledge(id){
+  const k = id ? S.knowledge.find(x=>x.id===id) : {id:null,title:"",text:"",on:true};
+  openSheet(`
+    <h3>${id?"ナレッジを編集":"ナレッジを追加"}</h3>
+    <div class="field"><label>タイトル</label>
+      <input type="text" id="kTitle" value="${escAttr(k.title)}" placeholder="例：蓮 キャラクターOS"></div>
+    <div class="field"><label>内容</label>
+      <textarea id="kText" style="min-height:220px" placeholder="設定・OS・プロンプトを貼り付け…">${esc(k.text)}</textarea></div>
+    <div class="rowBtns">
+      <button id="kSave" class="primary">保存</button>
+      <button id="kBack">戻る</button>
+    </div>
+  `);
+  $("#kBack").onclick=openKnowledge;
+  $("#kSave").onclick=()=>{
+    const title=$("#kTitle").value.trim()||"無題";
+    const text=$("#kText").value;
+    if(id){ const t=S.knowledge.find(x=>x.id===id); t.title=title; t.text=text; }
+    else S.knowledge.push({id:uid(),title,text,on:true});
+    save(); openKnowledge();
+  };
+}
+
+/* ============ utils ============ */
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function escAttr(s){ return esc(s).replace(/"/g,"&quot;"); }
+
+/* ============ events ============ */
+$("#btnMenu").onclick=openDrawer;
+overlayEl.onclick=closeDrawer;
+$("#btnNew").onclick=newConvo;
+$("#btnGear").onclick=openSettings;
+$("#btnSettings").onclick=openSettings;
+$("#btnKnowledge").onclick=openKnowledge;
+$("#sheetBg").onclick=closeSheet;
+convoTitleEl.onclick=renameConvo;
+sendBtn.onclick=send;
+taEl.addEventListener("input",()=>{
+  taEl.style.height="auto";
+  taEl.style.height=Math.min(taEl.scrollHeight,160)+"px";
+});
+
+/* ============ init ============ */
+if(!S.convos.length) { S.convos.push({id:uid(),title:"新しい会話",messages:[],updated:Date.now()}); S.currentId=S.convos[0].id; save(); }
+if(!S.currentId) S.currentId=S.convos[0].id;
+renderAll();
+if(!S.apiKey){ setTimeout(openSettings, 400); }
+</script>
+</body>
+</html>
