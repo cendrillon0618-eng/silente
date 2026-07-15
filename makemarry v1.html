@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Makemarry</title>
+<style>
+:root{
+  --bg:#F7F5F2; --surface:#FFFFFF; --ink:#2B2733; --sub:#8A8494;
+  --accent:#B25C77; --accent-deep:#9A4560; --accent-soft:#F5E4EA;
+  --line:#EAE6E1; --badge:#D14D72;
+  --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;
+  background:var(--bg); color:var(--ink); overflow:hidden;
+  height:100dvh; display:flex; flex-direction:column;
+}
+button{font-family:inherit;border:none;background:none;cursor:pointer;color:inherit}
+input,textarea,select{font-family:inherit;font-size:16px;color:var(--ink)}
+img{display:block}
+
+/* ---------- 共通レイアウト ---------- */
+.screen{flex:1;display:none;flex-direction:column;min-height:0}
+.screen.active{display:flex}
+.appbar{
+  padding:calc(var(--sat) + 10px) 16px 10px;
+  background:var(--surface); border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.wordmark{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-size:21px;letter-spacing:.5px;color:var(--accent-deep)}
+.appbar .spacer{flex:1}
+.iconbtn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent-deep)}
+.iconbtn:active{background:var(--accent-soft)}
+.list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:12px}
+
+/* ---------- タブバー ---------- */
+.tabbar{
+  display:flex;background:var(--surface);border-top:1px solid var(--line);
+  padding-bottom:var(--sab);flex-shrink:0;
+}
+.tab{flex:1;padding:10px 0 8px;text-align:center;font-size:11px;color:var(--sub)}
+.tab .ti{font-size:22px;display:block;margin-bottom:2px}
+.tab.on{color:var(--accent-deep)}
+
+/* ---------- トークリスト / キャラリスト ---------- */
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.row:active{background:#FBF7F8}
+.avatar{width:52px;height:52px;border-radius:50%;flex-shrink:0;overflow:hidden;background:var(--accent-soft);
+  display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent-deep);font-weight:600}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.avatar.sm{width:34px;height:34px;font-size:15px}
+.rowbody{flex:1;min-width:0}
+.rowname{font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
+.rowsub{font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.rowend{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.rowtime{font-size:11px;color:var(--sub)}
+.badge{min-width:19px;height:19px;border-radius:10px;background:var(--badge);color:#fff;font-size:11px;
+  display:flex;align-items:center;justify-content:center;padding:0 5px;font-weight:600}
+.gtag{font-size:10px;background:var(--accent-soft);color:var(--accent-deep);border-radius:6px;padding:1px 6px;font-weight:600}
+.empty{padding:60px 30px;text-align:center;color:var(--sub);font-size:14px;line-height:1.9}
+.fab{
+  position:absolute;right:18px;bottom:calc(78px + var(--sab));width:54px;height:54px;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:26px;box-shadow:0 4px 14px rgba(178,92,119,.4);
+  display:flex;align-items:center;justify-content:center;z-index:5;
+}
+.fab:active{background:var(--accent-deep)}
+.screenwrap{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* ---------- チャット画面 ---------- */
+#chatScreen{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:20}
+#chatScreen.active{display:flex}
+#chatWall{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 8px;background:linear-gradient(160deg,#F4EDF0,#EDE9F3)}
+.msgline{display:flex;margin-bottom:10px;align-items:flex-end;gap:8px}
+.msgline.me{flex-direction:row-reverse}
+.msgcol{max-width:76%;display:flex;flex-direction:column}
+.msgname{font-size:11px;color:rgba(43,39,51,.65);margin:0 4px 3px;text-shadow:0 0 4px rgba(255,255,255,.6)}
+.bubble{
+  padding:9px 13px;border-radius:16px;font-size:15px;line-height:1.65;white-space:pre-wrap;word-break:break-word;
+  background:rgba(255,255,255,.94);box-shadow:0 1px 2px rgba(43,39,51,.08);border-bottom-left-radius:5px;
+}
+.me .bubble{background:var(--accent);color:#fff;border-bottom-left-radius:16px;border-bottom-right-radius:5px}
+.msgtime{font-size:10px;color:rgba(43,39,51,.5);flex-shrink:0;text-shadow:0 0 4px rgba(255,255,255,.6)}
+.typing .bubble{color:var(--sub);letter-spacing:2px}
+.darkwall .msgtime,.darkwall .msgname{color:rgba(255,255,255,.75);text-shadow:none}
+#inputbar{
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:8px 10px calc(8px + var(--sab));display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
+}
+#msgInput{
+  flex:1;border:1px solid var(--line);border-radius:18px;padding:8px 14px;resize:none;
+  max-height:110px;background:var(--bg);line-height:1.5;
+}
+#msgInput:focus{outline:none;border-color:var(--accent)}
+#sendBtn{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;font-size:17px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center}
+#sendBtn:disabled{background:#D9CFD4}
+
+/* ---------- モーダル / シート ---------- */
+.overlay{position:fixed;inset:0;background:rgba(43,39,51,.45);z-index:40;display:none;align-items:flex-end}
+.overlay.active{display:flex}
+.overlay.center{align-items:center;justify-content:center;padding:24px}
+.sheet{
+  background:var(--surface);width:100%;border-radius:20px 20px 0 0;
+  padding:18px 18px calc(18px + var(--sab));max-height:88dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+}
+.overlay.center .sheet{border-radius:20px;max-height:80dvh;padding-bottom:18px}
+.sheettitle{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--sub);margin-bottom:5px;font-weight:600}
+.field input[type=text],.field input[type=password],.field input[type=number],.field select,.field textarea{
+  width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);
+}
+.field textarea{min-height:120px;resize:vertical;line-height:1.6}
+.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.btnrow{display:flex;gap:10px;margin-top:6px}
+.btn{
+  flex:1;padding:13px;border-radius:12px;font-size:15px;font-weight:600;text-align:center;
+  background:var(--accent);color:#fff;
+}
+.btn:active{background:var(--accent-deep)}
+.btn.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:#fff;color:#C0392B;border:1px solid #EDD6D2}
+.sheetitem{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);font-size:15px}
+.sheetitem:last-child{border-bottom:none}
+.sheetitem .si{font-size:20px;width:26px;text-align:center}
+.checkrow{display:flex;align-items:center;gap:12px;padding:10px 4px}
+.checkrow input{width:20px;height:20px;accent-color:var(--accent)}
+.avatarpick{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.avatarpick .avatar{width:64px;height:64px;font-size:26px}
+.minilink{font-size:13px;color:var(--accent-deep);font-weight:600}
+.wallgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.wallopt{height:72px;border-radius:12px;border:2px solid transparent;position:relative;overflow:hidden;
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;font-size:11px;color:rgba(43,39,51,.7)}
+.wallopt.sel{border-color:var(--accent)}
+.memberpick{max-height:38dvh;overflow-y:auto;border:1px solid var(--line);border-radius:12px;margin-bottom:14px}
+.settsec{background:var(--surface);border-radius:14px;margin:12px 14px;padding:4px 14px}
+.settsec .sechead{font-size:12px;color:var(--sub);font-weight:700;padding:12px 2px 4px}
+.note{font-size:12px;color:var(--sub);line-height:1.7;margin-top:6px}
+.toast{
+  position:fixed;left:50%;bottom:calc(100px + var(--sab));transform:translateX(-50%);
+  background:rgba(43,39,51,.9);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;z-index:99;
+  opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;
+}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ========== トーク ========== -->
+<div class="screen active" id="scr-talks">
+  <div class="appbar"><span class="wordmark">Makemarry</span><span class="spacer"></span></div>
+  <div class="screenwrap">
+    <div class="list" id="talkList"></div>
+    <button class="fab" onclick="openNewTalk()">＋</button>
+  </div>
+</div>
+
+<!-- ========== キャラ ========== -->
+<div class="screen" id="scr-chars">
+  <div class="appbar"><span style="font-size:17px;font-weight:700">キャラクター</span><span class="spacer"></span></div>
+  <div class="screenwrap">
+    <div class="list" id="charList"></div>
+    <button class="fab" onclick="openCharEdit(null)">＋</button>
+  </div>
+</div>
+
+<!-- ========== 設定 ========== -->
+<div class="screen" id="scr-settings">
+  <div class="appbar"><span style="font-size:17px;font-weight:700">設定</span><span class="spacer"></span></div>
+  <div class="list">
+    <div class="settsec">
+      <div class="sechead">APIキー</div>
+      <div class="field"><label>Anthropic（Claude）</label><input type="password" id="setAnthropic" placeholder="sk-ant-..."></div>
+      <div class="field"><label>OpenAI（GPT）</label><input type="password" id="setOpenai" placeholder="sk-..."></div>
+      <div class="field"><label>Google（Gemini）</label><input type="password" id="setGemini" placeholder="AIza..."></div>
+    </div>
+    <div class="settsec">
+      <div class="sechead">会話</div>
+      <div class="field"><label>あなたの名前（グルチャでの表示・キャラへの伝達に使用）</label><input type="text" id="setUserName" placeholder="かのん"></div>
+      <div class="checkrow"><input type="checkbox" id="setShortStyle" checked><label for="setShortStyle" style="font-size:14px">チャットらしい短文口調をキャラに指示する</label></div>
+      <div class="field"><label>最大応答トークン</label><input type="number" id="setMaxTokens" value="1024"></div>
+      <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
+    </div>
+    <div class="settsec">
+      <div class="sechead">データ</div>
+      <div class="sheetitem" onclick="exportBackup()"><span class="si">📤</span>バックアップを書き出す</div>
+      <div class="sheetitem" onclick="document.getElementById('importFile').click()"><span class="si">📥</span>バックアップを読み込む</div>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(this)">
+      <div class="note" id="storageInfo"></div>
+    </div>
+    <div class="btnrow" style="margin:4px 14px 20px"><button class="btn" onclick="saveSettings()">設定を保存</button></div>
+  </div>
+</div>
+
+<div class="tabbar">
+  <button class="tab on" data-scr="talks" onclick="switchTab('talks')"><span class="ti">💬</span>トーク</button>
+  <button class="tab" data-scr="chars" onclick="switchTab('chars')"><span class="ti">👥</span>キャラ</button>
+  <button class="tab" data-scr="settings" onclick="switchTab('settings')"><span class="ti">⚙️</span>設定</button>
+</div>
+
+<!-- ========== チャット画面 ========== -->
+<div id="chatScreen">
+  <div class="appbar">
+    <button class="iconbtn" onclick="closeChat()">‹</button>
+    <div class="avatar sm" id="chatAvatar"></div>
+    <span style="font-size:16px;font-weight:700" id="chatTitle"></span>
+    <span class="spacer"></span>
+    <button class="iconbtn" onclick="openChatMenu()">☰</button>
+  </div>
+  <div id="chatWall"></div>
+  <div id="inputbar">
+    <textarea id="msgInput" rows="1" placeholder="メッセージ" oninput="autosize(this)"></textarea>
+    <button id="sendBtn" onclick="sendMessage()">↑</button>
+  </div>
+</div>
+
+<!-- 汎用オーバーレイ -->
+<div class="overlay" id="ovl"><div class="sheet" id="ovlSheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= ストレージ ================= */
+const LS = {
+  get(k,d){ try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d} },
+  set(k,v){ localStorage.setItem(k,JSON.stringify(v)) },
+  del(k){ localStorage.removeItem(k) }
+};
+let chars = LS.get('mm_chars',[]);
+let talks = LS.get('mm_talks',[]);
+let settings = LS.get('mm_settings',{anthropicKey:'',openaiKey:'',geminiKey:'',userName:'',shortStyle:true,maxTokens:1024,histLimit:40});
+const saveChars=()=>LS.set('mm_chars',chars);
+const saveTalks=()=>LS.set('mm_talks',talks);
+const getMsgs=id=>LS.get('mm_msgs_'+id,[]);
+const saveMsgs=(id,m)=>LS.set('mm_msgs_'+id,m);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const userName=()=>settings.userName||'わたし';
+
+/* ================= 壁紙プリセット ================= */
+const WALLS = {
+  yoi:  {name:'宵',  css:'linear-gradient(160deg,#F4EDF0,#EDE9F3)'},
+  hi:   {name:'陽',  css:'linear-gradient(160deg,#FFF4E4,#FDE6D9)'},
+  tsuki:{name:'月',  css:'linear-gradient(160deg,#EEF1F8,#E3E7F2)'},
+  umi:  {name:'海',  css:'linear-gradient(160deg,#E4EFF1,#D8E6EC)'},
+  shiro:{name:'白',  css:'#FAF9F7'},
+  yoru: {name:'夜',  css:'linear-gradient(165deg,#3A3550,#2B2740)'}
+};
+
+/* ================= 共通UI ================= */
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+function switchTab(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('scr-'+name).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.scr===name));
+  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings();
+}
+function openSheet(html,center){
+  const o=document.getElementById('ovl');
+  o.classList.toggle('center',!!center);
+  document.getElementById('ovlSheet').innerHTML=html;
+  o.classList.add('active');
+}
+function closeSheet(){document.getElementById('ovl').classList.remove('active')}
+document.getElementById('ovl').addEventListener('click',e=>{if(e.target.id==='ovl')closeSheet()});
+function avatarHtml(obj,cls){
+  cls=cls||'avatar';
+  if(obj&&obj.icon)return `<div class="${cls}"><img src="${obj.icon}"></div>`;
+  const ch=obj&&obj.name?esc(obj.name[0]):'？';
+  return `<div class="${cls}">${ch}</div>`;
+}
+function fmtTime(ts){
+  const d=new Date(ts),now=new Date();
+  const hm=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');
+  if(d.toDateString()===now.toDateString())return hm;
+  return (d.getMonth()+1)+'/'+d.getDate();
+}
+function resizeImage(file,max,cb){
+  const r=new FileReader();
+  r.onload=()=>{const img=new Image();img.onload=()=>{
+    let w=img.width,h=img.height;
+    if(Math.max(w,h)>max){const s=max/Math.max(w,h);w=Math.round(w*s);h=Math.round(h*s)}
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',0.82));
+  };img.src=r.result};
+  r.readAsDataURL(file);
+}
+
+/* ================= キャラ管理 ================= */
+function renderChars(){
+  const el=document.getElementById('charList');
+  if(!chars.length){el.innerHTML='<div class="empty">まだキャラがいません。<br>＋ から最初のひとりを迎えてください。</div>';return}
+  el.innerHTML=chars.map(c=>`
+    <div class="row" onclick="openCharEdit('${c.id}')">
+      ${avatarHtml(c)}
+      <div class="rowbody">
+        <div class="rowname">${esc(c.name)}</div>
+        <div class="rowsub">${esc(c.provider)} / ${esc(c.model)}</div>
+      </div>
+    </div>`).join('');
+}
+let editIcon=null;
+function openCharEdit(id){
+  const c=id?chars.find(x=>x.id===id):null;
+  editIcon=c?c.icon:null;
+  openSheet(`
+    <div class="sheettitle">${c?'キャラを編集':'キャラを追加'}</div>
+    <div class="avatarpick">
+      <div id="editAvatarPrev">${avatarHtml(c||{name:''})}</div>
+      <button class="minilink" onclick="document.getElementById('charIconFile').click()">写真を選ぶ</button>
+      <input type="file" id="charIconFile" accept="image/*" style="display:none" onchange="pickCharIcon(this)">
+    </div>
+    <div class="field"><label>名前</label><input type="text" id="ceName" value="${c?esc(c.name):''}"></div>
+    <div class="field"><label>プロバイダー</label>
+      <select id="ceProvider" onchange="ceModelPlaceholder()">
+        <option value="anthropic"${!c||c.provider==='anthropic'?' selected':''}>Claude（Anthropic）</option>
+        <option value="openai"${c&&c.provider==='openai'?' selected':''}>GPT（OpenAI）</option>
+        <option value="gemini"${c&&c.provider==='gemini'?' selected':''}>Gemini（Google）</option>
+      </select>
+    </div>
+    <div class="field"><label>モデル名</label><input type="text" id="ceModel" value="${c?esc(c.model):''}" list="modelSuggest">
+      <datalist id="modelSuggest">
+        <option value="claude-opus-4-6"><option value="claude-opus-4-8"><option value="claude-sonnet-4-6"><option value="claude-fable-5">
+        <option value="gpt-4o"><option value="gemini-2.0-flash">
+      </datalist>
+    </div>
+    <div class="field"><label>キャラOS（システムプロンプト）</label><textarea id="ceOS" placeholder="話し方・性格・関係性・禁則など。ここに書いたものがそのまま核になります。">${c?esc(c.os):''}</textarea></div>
+    <div class="btnrow">
+      ${c?'<button class="btn danger" onclick="deleteChar(\''+c.id+'\')">削除</button>':''}
+      <button class="btn ghost" onclick="closeSheet()">やめる</button>
+      <button class="btn" onclick="saveChar('${c?c.id:''}')">保存</button>
+    </div>`);
+  ceModelPlaceholder();
+}
+function ceModelPlaceholder(){
+  const p=document.getElementById('ceProvider').value;
+  const m=document.getElementById('ceModel');
+  m.placeholder={anthropic:'claude-opus-4-6',openai:'gpt-4o',gemini:'gemini-2.0-flash'}[p];
+}
+function pickCharIcon(inp){
+  if(!inp.files[0])return;
+  resizeImage(inp.files[0],160,url=>{
+    editIcon=url;
+    document.getElementById('editAvatarPrev').innerHTML=`<div class="avatar" style="width:64px;height:64px"><img src="${url}"></div>`;
+  });
+}
+function saveChar(id){
+  const name=document.getElementById('ceName').value.trim();
+  if(!name){toast('名前を入れてください');return}
+  const data={
+    name, icon:editIcon,
+    provider:document.getElementById('ceProvider').value,
+    model:document.getElementById('ceModel').value.trim()||document.getElementById('ceModel').placeholder,
+    os:document.getElementById('ceOS').value
+  };
+  if(id){Object.assign(chars.find(c=>c.id===id),data)}
+  else{chars.push(Object.assign({id:uid()},data))}
+  saveChars();renderChars();closeSheet();toast('保存しました');
+}
+function deleteChar(id){
+  if(!confirm('このキャラと個別トークを削除します。よろしいですか？'))return;
+  chars=chars.filter(c=>c.id!==id);saveChars();
+  talks.filter(t=>t.type==='dm'&&t.charIds[0]===id).forEach(t=>LS.del('mm_msgs_'+t.id));
+  talks=talks.filter(t=>!(t.type==='dm'&&t.charIds[0]===id));
+  talks.forEach(t=>{if(t.type==='group')t.charIds=t.charIds.filter(x=>x!==id)});
+  saveTalks();renderChars();closeSheet();
+}
+
+/* ================= トークリスト ================= */
+function talkDisplay(t){
+  if(t.type==='group')return{name:t.name,icon:t.icon};
+  const c=chars.find(x=>x.id===t.charIds[0]);
+  return c?{name:c.name,icon:c.icon}:{name:'（削除済み）',icon:null};
+}
+function renderTalks(){
+  const el=document.getElementById('talkList');
+  const sorted=[...talks].sort((a,b)=>(b.lastTs||0)-(a.lastTs||0));
+  if(!sorted.length){el.innerHTML='<div class="empty">トークはまだありません。<br>＋ から会話を始めてください。</div>';return}
+  el.innerHTML=sorted.map(t=>{
+    const d=talkDisplay(t);
+    return `<div class="row" onclick="openChat('${t.id}')">
+      ${avatarHtml(d)}
+      <div class="rowbody">
+        <div class="rowname">${esc(d.name)}${t.type==='group'?'<span class="gtag">GROUP</span>':''}</div>
+        <div class="rowsub">${esc(t.lastPreview||'')}</div>
+      </div>
+      <div class="rowend">
+        <span class="rowtime">${t.lastTs?fmtTime(t.lastTs):''}</span>
+        ${t.unread?`<span class="badge">${t.unread}</span>`:''}
+      </div>
+    </div>`}).join('');
+}
+function openNewTalk(){
+  if(!chars.length){toast('先にキャラを登録してください');switchTab('chars');return}
+  openSheet(`
+    <div class="sheettitle">新しいトーク</div>
+    ${chars.map(c=>`<div class="sheetitem" onclick="startDM('${c.id}')">${avatarHtml(c,'avatar sm')}${esc(c.name)}</div>`).join('')}
+    <div class="sheetitem" onclick="openGroupCreate()"><span class="si">👥</span>グループを作る</div>`);
+}
+function startDM(charId){
+  let t=talks.find(x=>x.type==='dm'&&x.charIds[0]===charId);
+  if(!t){t={id:uid(),type:'dm',charIds:[charId],wallpaper:{type:'preset',value:'yoi'},lastTs:Date.now(),lastPreview:'',unread:0};talks.push(t);saveTalks()}
+  closeSheet();openChat(t.id);
+}
+let groupIcon=null;
+function openGroupCreate(){
+  groupIcon=null;
+  openSheet(`
+    <div class="sheettitle">グループを作る</div>
+    <div class="avatarpick">
+      <div id="groupAvatarPrev"><div class="avatar" style="width:64px;height:64px">👥</div></div>
+      <button class="minilink" onclick="document.getElementById('groupIconFile').click()">写真を選ぶ</button>
+      <input type="file" id="groupIconFile" accept="image/*" style="display:none" onchange="pickGroupIcon(this)">
+    </div>
+    <div class="field"><label>グループ名</label><input type="text" id="gcName" placeholder="例：みんなの部屋"></div>
+    <div class="field"><label>メンバー</label>
+      <div class="memberpick">${chars.map(c=>`
+        <div class="checkrow" style="padding:10px 12px"><input type="checkbox" class="gcMember" value="${c.id}" id="gm_${c.id}">
+        <label for="gm_${c.id}" style="display:flex;align-items:center;gap:10px;flex:1">${avatarHtml(c,'avatar sm')}${esc(c.name)}</label></div>`).join('')}
+      </div>
+    </div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="createGroup()">作成</button></div>`);
+}
+function pickGroupIcon(inp){
+  if(!inp.files[0])return;
+  resizeImage(inp.files[0],160,url=>{
+    groupIcon=url;
+    document.getElementById('groupAvatarPrev').innerHTML=`<div class="avatar" style="width:64px;height:64px"><img src="${url}"></div>`;
+  });
+}
+function createGroup(){
+  const name=document.getElementById('gcName').value.trim();
+  const ids=[...document.querySelectorAll('.gcMember:checked')].map(x=>x.value);
+  if(!name){toast('グループ名を入れてください');return}
+  if(ids.length<2){toast('メンバーを2人以上選んでください');return}
+  const t={id:uid(),type:'group',name,icon:groupIcon,charIds:ids,wallpaper:{type:'preset',value:'yoi'},lastTs:Date.now(),lastPreview:'',unread:0};
+  talks.push(t);saveTalks();closeSheet();openChat(t.id);
+}
+
+/* ================= チャット画面 ================= */
+let curTalk=null, generating=false;
+function openChat(talkId){
+  curTalk=talks.find(t=>t.id===talkId);
+  if(!curTalk)return;
+  curTalk.unread=0;saveTalks();
+  const d=talkDisplay(curTalk);
+  document.getElementById('chatTitle').textContent=d.name;
+  document.getElementById('chatAvatar').outerHTML=avatarHtml(d,'avatar sm').replace('class="avatar sm"','class="avatar sm" id="chatAvatar"');
+  applyWallpaper();
+  renderMsgs();
+  document.getElementById('chatScreen').classList.add('active');
+}
+function closeChat(){document.getElementById('chatScreen').classList.remove('active');curTalk=null;renderTalks()}
+function applyWallpaper(){
+  const w=curTalk.wallpaper||{type:'preset',value:'yoi'};
+  const el=document.getElementById('chatWall');
+  if(w.type==='image'){el.style.background=`url(${w.value}) center/cover fixed`}
+  else{el.style.background=WALLS[w.value]?WALLS[w.value].css:WALLS.yoi.css}
+  el.classList.toggle('darkwall',w.value==='yoru');
+}
+function renderMsgs(){
+  const el=document.getElementById('chatWall');
+  const msgs=getMsgs(curTalk.id);
+  el.innerHTML=msgs.map(m=>msgHtml(m)).join('');
+  el.scrollTop=el.scrollHeight;
+}
+function msgHtml(m){
+  if(m.role==='user'){
+    return `<div class="msgline me" onclick="msgActions('${m.id}')">
+      <div class="msgcol"><div class="bubble">${esc(m.text)}</div></div>
+      <span class="msgtime">${fmtTime(m.ts)}</span></div>`;
+  }
+  const c=chars.find(x=>x.id===m.charId);
+  const showName=curTalk.type==='group';
+  return `<div class="msgline" onclick="msgActions('${m.id}')">
+    ${avatarHtml(c||{name:'？'},'avatar sm')}
+    <div class="msgcol">
+      ${showName?`<div class="msgname">${esc(c?c.name:'？')}</div>`:''}
+      <div class="bubble">${esc(m.text)}</div>
+    </div>
+    <span class="msgtime">${fmtTime(m.ts)}</span></div>`;
+}
+function appendMsgEl(m){
+  const el=document.getElementById('chatWall');
+  el.insertAdjacentHTML('beforeend',msgHtml(m));
+  el.scrollTop=el.scrollHeight;
+}
+function autosize(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,110)+'px'}
+function pushMsg(m){
+  const msgs=getMsgs(curTalk.id);msgs.push(m);saveMsgs(curTalk.id,msgs);
+  curTalk.lastTs=m.ts;
+  curTalk.lastPreview=(m.role==='user'?userName():(chars.find(c=>c.id===m.charId)||{name:'？'}).name)+': '+m.text.slice(0,40);
+  saveTalks();
+}
+
+/* ---------- メッセージ操作 ---------- */
+function msgActions(msgId){
+  if(generating)return;
+  const msgs=getMsgs(curTalk.id);
+  const m=msgs.find(x=>x.id===msgId);if(!m)return;
+  const isLastChar=m.role==='char'&&msgs[msgs.length-1].id===msgId;
+  openSheet(`
+    <div class="sheettitle">メッセージ</div>
+    ${m.role==='user'?`<div class="sheetitem" onclick="editMsg('${msgId}')"><span class="si">✏️</span>編集する</div>`:''}
+    ${isLastChar?`<div class="sheetitem" onclick="regenMsg('${msgId}')"><span class="si">🔄</span>もう一度生成する</div>`:''}
+    <div class="sheetitem" onclick="copyMsg('${msgId}')"><span class="si">📋</span>コピー</div>
+    <div class="sheetitem" onclick="deleteMsg('${msgId}')" style="color:#C0392B"><span class="si">🗑️</span>このメッセージ以降を削除</div>`);
+}
+function copyMsg(id){
+  const m=getMsgs(curTalk.id).find(x=>x.id===id);
+  navigator.clipboard.writeText(m.text).then(()=>toast('コピーしました'));
+  closeSheet();
+}
+function deleteMsg(id){
+  let msgs=getMsgs(curTalk.id);
+  const i=msgs.findIndex(x=>x.id===id);
+  msgs=msgs.slice(0,i);saveMsgs(curTalk.id,msgs);
+  closeSheet();renderMsgs();
+}
+function editMsg(id){
+  const m=getMsgs(curTalk.id).find(x=>x.id===id);
+  openSheet(`
+    <div class="sheettitle">メッセージを編集</div>
+    <div class="field"><textarea id="emText">${esc(m.text)}</textarea></div>
+    <div class="note">保存すると、このメッセージ以降のやり取りは削除され、ここから会話が続きます。</div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="applyEdit('${id}')">保存して続ける</button></div>`);
+}
+function applyEdit(id){
+  const text=document.getElementById('emText').value.trim();
+  if(!text)return;
+  let msgs=getMsgs(curTalk.id);
+  const i=msgs.findIndex(x=>x.id===id);
+  msgs=msgs.slice(0,i);
+  saveMsgs(curTalk.id,msgs);
+  closeSheet();renderMsgs();
+  const inp=document.getElementById('msgInput');
+  inp.value=text;autosize(inp);
+  sendMessage();
+}
+function regenMsg(id){
+  let msgs=getMsgs(curTalk.id);
+  const i=msgs.findIndex(x=>x.id===id);
+  const charId=msgs[i].charId;
+  msgs=msgs.slice(0,i);saveMsgs(curTalk.id,msgs);
+  closeSheet();renderMsgs();
+  generateFor(chars.find(c=>c.id===charId));
+}
+
+/* ---------- チャットメニュー（壁紙など） ---------- */
+function openChatMenu(){
+  openSheet(`
+    <div class="sheettitle">${esc(talkDisplay(curTalk).name)}</div>
+    <div class="sheetitem" onclick="openWallpaperPick()"><span class="si">🖼️</span>壁紙を変える</div>
+    ${curTalk.type==='group'?`<div class="sheetitem" onclick="showMembers()"><span class="si">👥</span>メンバー</div>`:''}
+    <div class="sheetitem" onclick="clearTalk()" style="color:#C0392B"><span class="si">🗑️</span>履歴を全部消す</div>
+    <div class="sheetitem" onclick="deleteTalk()" style="color:#C0392B"><span class="si">✖️</span>このトークを削除</div>`);
+}
+function openWallpaperPick(){
+  const cur=curTalk.wallpaper||{};
+  openSheet(`
+    <div class="sheettitle">壁紙</div>
+    <div class="wallgrid">
+      ${Object.entries(WALLS).map(([k,w])=>`
+        <div class="wallopt ${cur.type==='preset'&&cur.value===k?'sel':''}" style="background:${w.css}" onclick="setWall('preset','${k}')">${w.name}</div>`).join('')}
+      <div class="wallopt ${cur.type==='image'?'sel':''}" style="background:#EFEBE6" onclick="document.getElementById('wallFile').click()">📷 写真</div>
+    </div>
+    <input type="file" id="wallFile" accept="image/*" style="display:none" onchange="pickWallImage(this)">
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">閉じる</button></div>`);
+}
+function setWall(type,value){
+  curTalk.wallpaper={type,value};saveTalks();applyWallpaper();closeSheet();
+}
+function pickWallImage(inp){
+  if(!inp.files[0])return;
+  resizeImage(inp.files[0],900,url=>setWall('image',url));
+}
+function showMembers(){
+  const members=curTalk.charIds.map(id=>chars.find(c=>c.id===id)).filter(Boolean);
+  openSheet(`
+    <div class="sheettitle">メンバー</div>
+    ${members.map(c=>`<div class="sheetitem">${avatarHtml(c,'avatar sm')}${esc(c.name)}</div>`).join('')}
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">閉じる</button></div>`);
+}
+function clearTalk(){
+  if(!confirm('このトークの履歴をすべて削除します。よろしいですか？'))return;
+  saveMsgs(curTalk.id,[]);curTalk.lastPreview='';saveTalks();closeSheet();renderMsgs();
+}
+function deleteTalk(){
+  if(!confirm('このトーク自体を削除します。よろしいですか？'))return;
+  LS.del('mm_msgs_'+curTalk.id);
+  talks=talks.filter(t=>t.id!==curTalk.id);saveTalks();
+  closeSheet();closeChat();
+}
+
+/* ================= 送信・生成 ================= */
+async function sendMessage(){
+  if(generating)return;
+  const inp=document.getElementById('msgInput');
+  const text=inp.value.trim();
+  if(!text)return;
+  inp.value='';autosize(inp);
+  const m={id:uid(),role:'user',text,ts:Date.now()};
+  pushMsg(m);appendMsgEl(m);
+  if(curTalk.type==='dm'){
+    const c=chars.find(x=>x.id===curTalk.charIds[0]);
+    if(!c){toast('キャラが見つかりません');return}
+    await generateFor(c);
+  }else{
+    await runGroupTurn();
+  }
+}
+function setGenerating(on){
+  generating=on;
+  document.getElementById('sendBtn').disabled=on;
+}
+function showTyping(c){
+  const el=document.getElementById('chatWall');
+  el.insertAdjacentHTML('beforeend',`<div class="msgline typing" id="typing">
+    ${avatarHtml(c||{name:'？'},'avatar sm')}<div class="msgcol">
+    ${curTalk.type==='group'?`<div class="msgname">${esc(c.name)}</div>`:''}
+    <div class="bubble">…</div></div></div>`);
+  el.scrollTop=el.scrollHeight;
+}
+function hideTyping(){const t=document.getElementById('typing');if(t)t.remove()}
+
+async function generateFor(c){
+  setGenerating(true);showTyping(c);
+  try{
+    const text=await callModel(c);
+    hideTyping();
+    const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
+    pushMsg(m);appendMsgEl(m);
+  }catch(e){
+    hideTyping();toast('エラー: '+e.message);
+  }
+  setGenerating(false);
+}
+
+/* ---------- グルチャのターン制御 ---------- */
+async function runGroupTurn(){
+  setGenerating(true);
+  const members=curTalk.charIds.map(id=>chars.find(c=>c.id===id)).filter(Boolean);
+  let speakers=[];
+  try{ speakers=await routeSpeakers(members); }catch(e){ speakers=[members[Math.floor(Math.random()*members.length)]]; }
+  for(const c of speakers){
+    showTyping(c);
+    try{
+      const text=await callModel(c);
+      hideTyping();
+      const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
+      pushMsg(m);appendMsgEl(m);
+    }catch(e){hideTyping();toast(c.name+' のエラー: '+e.message);break}
+  }
+  setGenerating(false);
+}
+async function routeSpeakers(members){
+  const msgs=getMsgs(curTalk.id).slice(-10);
+  const transcript=msgs.map(m=>{
+    const n=m.role==='user'?userName():(chars.find(c=>c.id===m.charId)||{name:'？'}).name;
+    return n+': '+m.text;
+  }).join('\n');
+  const names=members.map(m=>m.name);
+  const prompt=`グループチャットの直近の会話です。次に発言するのが自然なキャラクターを、この中から1〜3人、発言順にJSON配列で答えてください: ${JSON.stringify(names)}\n最後に発言した人以外を優先し、話しかけられた人がいれば必ず含めてください。JSON配列のみを出力してください。\n\n会話:\n${transcript}`;
+  let raw;
+  if(settings.anthropicKey){
+    raw=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:prompt}],200);
+  }else{
+    const c=members[0];
+    raw=await callProvider(c.provider,c.model,'',[{role:'user',content:prompt}],200);
+  }
+  const arr=JSON.parse(raw.replace(/```json|```/g,'').trim());
+  const picked=arr.map(n=>members.find(m=>m.name===n)).filter(Boolean);
+  return picked.length?picked.slice(0,3):[members[0]];
+}
+
+/* ---------- トランスクリプト構築 ---------- */
+function buildSystem(c){
+  let sys=c.os||'';
+  if(curTalk.type==='group'){
+    const names=curTalk.charIds.map(id=>(chars.find(x=>x.id===id)||{name:'？'}).name);
+    sys+=`\n\n【グループチャット】ここは「${curTalk.name}」というグループチャット。参加者: ${userName()}、${names.join('、')}。あなたは${c.name}として発言する。他の参加者のセリフを代わりに書かない。自分の名前をメッセージの頭に付けない。`;
+  }
+  if(settings.shortStyle){
+    sys+=`\n\n【形式】これはスマホのチャットアプリでの会話。地の文や情景描写ではなく、チャットとして自然な長さのメッセージで返す。`;
+  }
+  return sys;
+}
+function buildTranscript(c){
+  const msgs=getMsgs(curTalk.id).slice(-(settings.histLimit||40));
+  const blocks=[];
+  for(const m of msgs){
+    const mine=m.role==='char'&&m.charId===c.id;
+    const role=mine?'assistant':'user';
+    let text=m.text;
+    if(!mine&&curTalk.type==='group'){
+      const n=m.role==='user'?userName():(chars.find(x=>x.id===m.charId)||{name:'？'}).name;
+      text=n+': '+text;
+    }
+    if(blocks.length&&blocks[blocks.length-1].role===role){
+      blocks[blocks.length-1].content+='\n'+text;
+    }else{
+      blocks.push({role,content:text});
+    }
+  }
+  if(!blocks.length||blocks[0].role!=='user')blocks.unshift({role:'user',content:'（会話開始）'});
+  if(blocks[blocks.length-1].role!=='user')blocks.push({role:'user',content:'（続けて）'});
+  return blocks;
+}
+
+/* ---------- API呼び出し ---------- */
+async function callModel(c){
+  return callProvider(c.provider,c.model,buildSystem(c),buildTranscript(c),settings.maxTokens||1024);
+}
+async function callProvider(provider,model,system,messages,maxTokens){
+  if(provider==='anthropic')return anthropicCall(model,system,messages,maxTokens);
+  if(provider==='openai')return openaiCall(model,system,messages,maxTokens);
+  if(provider==='gemini')return geminiCall(model,system,messages,maxTokens);
+  throw new Error('不明なプロバイダー');
+}
+async function anthropicCall(model,system,messages,maxTokens){
+  if(!settings.anthropicKey)throw new Error('AnthropicのAPIキーが未設定です');
+  const body={model,max_tokens:maxTokens,messages};
+  if(system)body.system=system;
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':settings.anthropicKey,
+      'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify(body)
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+}
+async function openaiCall(model,system,messages,maxTokens){
+  if(!settings.openaiKey)throw new Error('OpenAIのAPIキーが未設定です');
+  const msgs=system?[{role:'system',content:system},...messages]:messages;
+  const res=await fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openaiKey},
+    body:JSON.stringify({model,messages:msgs,max_tokens:maxTokens})
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  return data.choices[0].message.content.trim();
+}
+async function geminiCall(model,system,messages,maxTokens){
+  if(!settings.geminiKey)throw new Error('GeminiのAPIキーが未設定です');
+  const contents=messages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+  const body={contents,generationConfig:{maxOutputTokens:maxTokens}};
+  if(system)body.systemInstruction={parts:[{text:system}]};
+  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  return data.candidates[0].content.parts.map(p=>p.text).join('').trim();
+}
+
+/* ================= 設定 ================= */
+function renderSettings(){
+  document.getElementById('setAnthropic').value=settings.anthropicKey||'';
+  document.getElementById('setOpenai').value=settings.openaiKey||'';
+  document.getElementById('setGemini').value=settings.geminiKey||'';
+  document.getElementById('setUserName').value=settings.userName||'';
+  document.getElementById('setShortStyle').checked=settings.shortStyle!==false;
+  document.getElementById('setMaxTokens').value=settings.maxTokens||1024;
+  document.getElementById('setHistLimit').value=settings.histLimit||40;
+  try{
+    let bytes=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('mm_'))bytes+=(localStorage.getItem(k)||'').length*2}
+    document.getElementById('storageInfo').textContent=`使用中: 約${(bytes/1024).toFixed(0)}KB（localStorageの上限は約5MB。写真は自動で縮小して保存します）`;
+  }catch(e){}
+}
+function saveSettings(){
+  settings={
+    anthropicKey:document.getElementById('setAnthropic').value.trim(),
+    openaiKey:document.getElementById('setOpenai').value.trim(),
+    geminiKey:document.getElementById('setGemini').value.trim(),
+    userName:document.getElementById('setUserName').value.trim(),
+    shortStyle:document.getElementById('setShortStyle').checked,
+    maxTokens:parseInt(document.getElementById('setMaxTokens').value)||1024,
+    histLimit:parseInt(document.getElementById('setHistLimit').value)||40
+  };
+  LS.set('mm_settings',settings);
+  toast('設定を保存しました');
+}
+
+/* ================= バックアップ ================= */
+function exportBackup(){
+  const dump={};
+  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('mm_'))dump[k]=localStorage.getItem(k)}
+  const blob=new Blob([JSON.stringify(dump)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='makemarry_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  toast('書き出しました');
+}
+function importBackup(inp){
+  const f=inp.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const dump=JSON.parse(r.result);
+      Object.entries(dump).forEach(([k,v])=>{if(k.startsWith('mm_'))localStorage.setItem(k,v)});
+      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);
+      renderTalks();renderChars();renderSettings();
+      toast('読み込みました');
+    }catch(e){toast('読み込みに失敗しました')}
+  };
+  r.readAsText(f);
+  inp.value='';
+}
+
+/* ================= 初期化 ================= */
+renderTalks();
+renderSettings();
+</script>
+</body>
+</html>
