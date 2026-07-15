@@ -253,6 +253,24 @@ const WALLS = {
 /* ================= 共通UI ================= */
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+function showError(e){
+  let msg=(e&&e.message)?e.message:String(e);
+  let hint='';
+  if(/Load failed|Failed to fetch|NetworkError/i.test(msg)){
+    hint='通信がAPIに届いていません。①機内モード/圏外でないか ②Safariのコンテンツブロッカーや広告ブロックがAPIを止めていないか ③iCloudプライベートリレーをこのサイトでオフにして再試行、を確認してください。';
+  }else if(/invalid.*header|header.*invalid/i.test(msg)){
+    hint='APIキーに余計な文字（改行・空白）が混ざっている可能性があります。キーを貼り直して保存してください。';
+  }else if(/model|not_found/i.test(msg)){
+    hint='モデル名が正しくない可能性があります。キャラ編集でモデル名を確認してください。';
+  }else if(/401|authentication|api.?key/i.test(msg)){
+    hint='APIキーが無効です。console.anthropic.com等で発行したキーか確認してください。';
+  }
+  openSheet(`
+    <div class="sheettitle">エラーの詳細</div>
+    <div class="field"><textarea readonly style="min-height:90px">${esc(msg)}</textarea></div>
+    ${hint?`<div class="note">${esc(hint)}</div>`:''}
+    <div class="btnrow"><button class="btn ghost" onclick="navigator.clipboard.writeText(document.querySelector('#ovlSheet textarea').value);toast('コピーしました')">エラーをコピー</button><button class="btn" onclick="closeSheet()">閉じる</button></div>`);
+}
 function switchTab(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('scr-'+name).classList.add('active');
@@ -636,7 +654,7 @@ async function generateFor(c){
     const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
     pushMsg(m);appendMsgEl(m);
   }catch(e){
-    hideTyping();toast('エラー: '+e.message);
+    hideTyping();showError(e);
   }
   setGenerating(false);
 }
@@ -654,7 +672,7 @@ async function runGroupTurn(){
       hideTyping();
       const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
       pushMsg(m);appendMsgEl(m);
-    }catch(e){hideTyping();toast(c.name+' のエラー: '+e.message);break}
+    }catch(e){hideTyping();showError(e);break}
   }
   setGenerating(false);
 }
@@ -746,6 +764,7 @@ async function openaiCall(model,system,messages,maxTokens){
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  if(!data.choices||!data.choices[0])throw new Error('OpenAI応答が不正: '+JSON.stringify(data).slice(0,200));
   return data.choices[0].message.content.trim();
 }
 async function geminiCall(model,system,messages,maxTokens){
@@ -758,6 +777,7 @@ async function geminiCall(model,system,messages,maxTokens){
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  if(!data.candidates||!data.candidates[0])throw new Error('Gemini応答が不正: '+JSON.stringify(data).slice(0,200));
   return data.candidates[0].content.parts.map(p=>p.text).join('').trim();
 }
 
