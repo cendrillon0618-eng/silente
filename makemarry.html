@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#B25C77">
+<link rel="manifest" href="mm-manifest.json">
+<link rel="apple-touch-icon" href="mm-icon-180.png">
 <title>Makemarry</title>
 <style>
 :root{
@@ -212,9 +215,15 @@ img{display:block}
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
     </div>
     <div class="settsec">
+      <div class="sechead">通知（Phase 2）</div>
+      <div class="note" id="pwaStatus" style="margin-top:10px"></div>
+      <div class="sheetitem" onclick="askNotifPermission()"><span class="si">🔔</span>通知を許可する</div>
+      <div class="sheetitem" onclick="testNotification()"><span class="si">📨</span>テスト通知を送る</div>
+    </div>
+    <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v1.4.1</div>
+      <div class="note">Makemarry v2.0</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -1020,6 +1029,7 @@ function renderSettings(){
     let bytes=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('mm_'))bytes+=(localStorage.getItem(k)||'').length*2}
     document.getElementById('storageInfo').textContent=`使用中: 約${(bytes/1024).toFixed(0)}KB（localStorageの上限は約5MB。写真は自動で縮小して保存します）`;
   }catch(e){}
+  updatePwaStatus();
 }
 function saveSettings(){
   settings={
@@ -1148,9 +1158,46 @@ async function runDiag(){
   openSheet('<div class="sheettitle">接続テスト結果</div><div class="field"><textarea readonly style="min-height:220px">'+esc(lines.join('\n'))+'</textarea></div><div class="btnrow"><button class="btn ghost" onclick="navigator.clipboard.writeText(document.querySelector(&quot;#ovlSheet textarea&quot;).value);toast(&quot;コピーしました&quot;)">結果をコピー</button><button class="btn" onclick="closeSheet()">閉じる</button></div>');
 }
 
+/* ================= PWA / 通知 ================= */
+let swReg=null;
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('mm-sw.js').then(r=>{swReg=r}).catch(()=>{});
+}
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+}
+function updatePwaStatus(){
+  const el=document.getElementById('pwaStatus');
+  if(!el)return;
+  const lines=[];
+  lines.push(isStandalone()
+    ?'✅ ホーム画面のアプリとして起動中'
+    :'⚠️ ブラウザで開いています。iPhoneで通知を使うには、Safariの共有ボタン→「ホーム画面に追加」で追加して、そのアイコンから起動してください。');
+  if('Notification' in window){
+    const p=Notification.permission;
+    lines.push(p==='granted'?'✅ 通知：許可済み':p==='denied'?'❌ 通知：拒否されています（iOS設定→アプリ→通知から変更）':'・通知：未設定');
+  }else{
+    lines.push('・この起動方法では通知APIが使えません');
+  }
+  el.innerHTML=lines.map(esc).join('<br>');
+}
+async function askNotifPermission(){
+  if(!('Notification' in window)){toast('ホーム画面に追加したアプリから開いてください');return}
+  const p=await Notification.requestPermission();
+  updatePwaStatus();
+  toast(p==='granted'?'通知が許可されました':'許可されませんでした');
+}
+async function testNotification(){
+  if(!('Notification' in window)||Notification.permission!=='granted'){toast('先に通知を許可してください');return}
+  if(!swReg){toast('Service Worker準備中。少し待って再試行してください');return}
+  await swReg.showNotification('Makemarry',{body:'テスト通知や。届いてるで。',icon:'mm-icon-192.png',badge:'mm-icon-192.png'});
+  toast('送りました（ホームに戻ると見えます）');
+}
+
 /* ================= 初期化 ================= */
 renderTalks();
 renderSettings();
+updatePwaStatus();
 </script>
 </body>
 </html>
