@@ -187,6 +187,11 @@ img{display:block}
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
     </div>
     <div class="settsec">
+      <div class="sechead">診断</div>
+      <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
+      <div class="note">Makemarry v1.2</div>
+    </div>
+    <div class="settsec">
       <div class="sechead">データ</div>
       <div class="sheetitem" onclick="exportBackup()"><span class="si">📤</span>バックアップを書き出す</div>
       <div class="sheetitem" onclick="document.getElementById('importFile').click()"><span class="si">📥</span>バックアップを読み込む</div>
@@ -254,7 +259,8 @@ const WALLS = {
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
 function showError(e){
-  let msg=(e&&e.message)?e.message:String(e);
+  let msg=(e&&e.name?e.name+': ':'')+((e&&e.message)?e.message:String(e));
+  if(e&&e.stack)msg+='\n---\n'+String(e.stack).slice(0,300);
   let hint='';
   if(/Load failed|Failed to fetch|NetworkError/i.test(msg)){
     hint='通信がAPIに届いていません。①機内モード/圏外でないか ②Safariのコンテンツブロッカーや広告ブロックがAPIを止めていないか ③iCloudプライベートリレーをこのサイトでオフにして再試行、を確認してください。';
@@ -834,6 +840,41 @@ function importBackup(inp){
   };
   r.readAsText(f);
   inp.value='';
+}
+
+/* ================= 診断 ================= */
+function checkKeyChars(label,key){
+  if(!key)return label+': 未入力';
+  for(let i=0;i<key.length;i++){
+    const code=key.charCodeAt(i);
+    if(code<33||code>126){
+      return label+': ⚠️ '+(i+1)+'文字目に不正な文字（コード'+code+'）。改行・空白・全角文字が混ざっています';
+    }
+  }
+  return label+': 文字はOK（長さ'+key.length+'）';
+}
+async function runDiag(){
+  saveSettings();
+  const lines=[];
+  lines.push(checkKeyChars('Anthropic',settings.anthropicKey));
+  lines.push(checkKeyChars('OpenAI',settings.openaiKey));
+  lines.push(checkKeyChars('Gemini',settings.geminiKey));
+  lines.push('');
+  if(settings.anthropicKey){
+    lines.push('AnthropicにテストAPI送信中...');
+    try{
+      const r=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:'test'}],10);
+      lines.push('✅ 成功。応答: '+r.slice(0,50));
+    }catch(e){
+      lines.push('❌ 失敗');
+      lines.push('name: '+(e.name||''));
+      lines.push('message: '+(e.message||String(e)));
+      if(e.stack)lines.push('stack: '+String(e.stack).slice(0,300));
+    }
+  }else{
+    lines.push('Anthropicキー未入力のためAPIテストはスキップ');
+  }
+  openSheet('<div class="sheettitle">接続テスト結果</div><div class="field"><textarea readonly style="min-height:220px">'+esc(lines.join('\n'))+'</textarea></div><div class="btnrow"><button class="btn ghost" onclick="navigator.clipboard.writeText(document.querySelector(&quot;#ovlSheet textarea&quot;).value);toast(&quot;コピーしました&quot;)">結果をコピー</button><button class="btn" onclick="closeSheet()">閉じる</button></div>');
 }
 
 /* ================= 初期化 ================= */
