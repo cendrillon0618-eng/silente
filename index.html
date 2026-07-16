@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0A0D15">
+<link rel="apple-touch-icon" sizes="180x180" href="icon.png">
 <title>Silente</title>
 <style>
 :root{
@@ -138,6 +139,45 @@ textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
 .toggle.on::after{left:21px;background:var(--accent)}
 .kItem .edit{color:var(--sub);width:40px;height:40px;flex:none}
 #kAdd{width:100%;margin-top:14px;padding:13px;border:1px dashed var(--line);border-radius:14px;color:var(--sub)}
+
+/* attach & images */
+#btnAttach,#btnSnip{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid var(--line);color:var(--sub);font-size:22px;display:flex;align-items:center;justify-content:center;margin-bottom:2px}
+#btnSnip{font-size:17px}
+#attachStrip{display:none;gap:8px;padding:8px 14px 0;background:rgba(10,13,21,.92)}
+#attachStrip.on{display:flex}
+.attachThumb{position:relative}
+.attachThumb img{width:54px;height:54px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.attachThumb button{position:absolute;top:-7px;right:-7px;width:21px;height:21px;border-radius:50%;background:var(--surface2);color:var(--text);font-size:11px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.msg .imgs{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;justify-content:flex-end}
+.msg.assistant .imgs{justify-content:flex-start}
+.msg.assistant .imgs img{max-width:70vw}
+.msg .imgs img{width:130px;max-width:42vw;border-radius:12px;border:1px solid var(--line)}
+
+/* convo search */
+#convoSearch{margin:0 16px 12px;padding:10px 13px;background:var(--bg);border:1px solid var(--line);border-radius:12px;outline:none;width:calc(100% - 32px);font-size:16px;color:var(--text)}
+.convoItem .snip{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+
+/* settings option rows */
+.optRow{display:flex;align-items:center;justify-content:space-between;padding:7px 2px;font-size:15px}
+
+/* presets */
+#presetRow{display:flex;gap:8px;padding:0 16px 12px}
+.pChip{flex:1;padding:9px 2px;border:1px solid var(--line);border-radius:12px;color:var(--sub);font-size:13px;text-align:center;background:var(--surface2)}
+.pChip.cur{color:var(--accent);border-color:var(--accent);background:rgba(200,178,126,.12)}
+
+/* header image & avatar */
+#chatHead{margin-bottom:16px}
+#chatHead img{width:100%;height:130px;object-fit:cover;border-radius:16px;border:1px solid var(--line)}
+.bubbleRow{display:flex;align-items:flex-end;gap:8px;max-width:100%;justify-content:flex-end}
+.avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid var(--line);flex:none}
+
+/* thoughts */
+.thoughtBox{border-left:2px solid var(--line);padding:7px 11px;margin:2px 0 10px;background:rgba(19,24,38,.55);border-radius:0 12px 12px 0}
+.thoughtBox .tHead{font-size:12px;color:var(--sub);letter-spacing:.05em}
+.thoughtBox .tBody{font-size:13px;color:var(--sub);white-space:pre-wrap;word-break:break-word;margin-top:6px;line-height:1.75}
+
+/* system note */
+.sysnote{font-size:12px;color:var(--sub);text-align:center;margin:0 0 16px}
 </style>
 </head>
 <body>
@@ -158,18 +198,35 @@ textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
 
   <div id="chat"></div>
 
+  <div id="attachStrip"></div>
+  <div id="quickBar" style="display:flex;align-items:center;gap:8px;padding:4px 14px 0;background:rgba(10,13,21,.92)">
+    <button id="qbModel" style="border:1px solid var(--line);border-radius:10px;padding:4px 10px;color:var(--accent);font-size:12px;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none">…</button>
+    <input id="qbMax" type="number" min="128" max="16384" step="64" style="width:78px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:4px 8px;font-size:16px;color:var(--text);flex:none">
+    <span id="costHint" style="flex:1;text-align:right;font-size:11px;color:var(--sub)"></span>
+  </div>
   <div id="inputbar">
+    <button id="btnAttach" aria-label="画像を添付">＋</button>
+    <button id="btnSnip" aria-label="スニペット">⚡</button>
     <textarea id="ta" rows="1" placeholder="メッセージ…"></textarea>
     <button id="btnSend" aria-label="送信">↑</button>
   </div>
 </div>
+<input type="file" id="imgFile" accept="image/*" multiple style="display:none">
 
 <div id="overlay"></div>
 <div id="drawer">
   <h2>SILENTE</h2>
   <button id="btnNew">＋ 新しい会話</button>
+  <div id="presetRow"></div>
+  <input type="search" id="convoSearch" placeholder="🔍 会話を検索…">
   <div id="convoList"></div>
   <div id="drawerFoot">
+    <button id="btnPresets">🍰 プリセット編集</button>
+    <button id="btnImageGen">🎨 画像生成</button>
+    <button id="btnUsage">💰 使用量</button>
+    <button id="btnFavs">🩷 お気に入り</button>
+    <button id="btnSched">⏰ 予定メッセージ</button>
+    <button id="btnMemory">🌙 メモリ</button>
     <button id="btnKnowledge">📁 ナレッジ</button>
     <button id="btnSettings">⚙ 設定</button>
   </div>
@@ -193,18 +250,92 @@ const MODELS = [
   ["claude-haiku-4-5-20251001","Haiku 4.5（速い・安い）"]
 ];
 let S = load();
+function defaultPresets(){
+  return [
+    {id:"p_write",name:"✒️ 執筆",systemPrompt:"",model:"",knowledgeIds:[]},
+    {id:"p_aoi",name:"🩵 葵",systemPrompt:"",model:"",knowledgeIds:[]},
+    {id:"p_talk",name:"💬 相談",systemPrompt:"",model:"",knowledgeIds:[]}
+  ];
+}
 function defaults(){
   return {
-    apiKey:"", model:"claude-sonnet-4-6", maxTokens:4096,
-    systemPrompt:"", knowledge:[], convos:[], currentId:null
+    apiKey:"", model:"claude-sonnet-4-6", defaultProvider:"anthropic", maxTokens:4096, webSearch:false, autoCompact:true,
+    geminiKey:"", geminiImageModel:"gemini-2.5-flash-image", openaiKey:"", openaiImageModel:"gpt-image-2", imageProvider:"gemini",
+    systemPrompt:"", memory:[{id:"m1",title:"創作について",text:""},{id:"m2",title:"葵について",text:""},{id:"m3",title:"わたしについて",text:""}], knowledge:[], convos:[], currentId:null,
+    morning:{on:false,startHour:10,endHour:15}, morningDone:"", usage:{}, favorites:[],
+    snippets:[], lastBackup:0, backupNudgeDay:"", charRefs:[],
+    ttsVoice:"onyx", ttsInstructions:"", schedules:[], showThoughts:false,
+    presets:defaultPresets(), currentPreset:"p_write"
   };
 }
 function load(){
   try{
     const raw = localStorage.getItem(LSKEY);
     if(!raw) return defaults();
-    return Object.assign(defaults(), JSON.parse(raw));
+    const s = Object.assign(defaults(), JSON.parse(raw));
+    if(typeof s.memory==="string") s.memory=[{id:uid(),title:"メモ",text:s.memory}];
+    else if(s.memory && !Array.isArray(s.memory)) s.memory=[
+      {id:uid(),title:"創作について",text:s.memory.work||""},
+      {id:uid(),title:"葵について",text:s.memory.aoi||""},
+      {id:uid(),title:"わたしについて",text:s.memory.me||""}
+    ];
+    if(!Array.isArray(s.memory)) s.memory=[];
+    if(!s.morning) s.morning={on:false,startHour:10,endHour:15};
+    if(s.morningDone===undefined) s.morningDone="";
+    if(!s.usage) s.usage={};
+    if(!Array.isArray(s.favorites)) s.favorites=[];
+    if(!Array.isArray(s.snippets)) s.snippets=[];
+    if(!s.lastBackup) s.lastBackup=Date.now();
+    if(s.backupNudgeDay===undefined) s.backupNudgeDay="";
+    if(!Array.isArray(s.charRefs)) s.charRefs=[];
+    if(!s.ttsVoice) s.ttsVoice="onyx";
+    if(s.ttsInstructions===undefined) s.ttsInstructions="";
+    if(!Array.isArray(s.schedules)) s.schedules=[];
+    if(s.showThoughts===undefined) s.showThoughts=false;
+    if(!Array.isArray(s.presets)||!s.presets.length){
+      s.presets=defaultPresets();
+      const onIds=(s.knowledge||[]).filter(k=>k.on).map(k=>k.id);
+      s.presets[0].systemPrompt=s.systemPrompt||"";
+      s.presets[0].knowledgeIds=onIds.slice();
+      s.presets[2].knowledgeIds=onIds.slice();
+    }
+    if(!s.currentPreset || !s.presets.find(p=>p.id===s.currentPreset)) s.currentPreset=s.presets[0].id;
+    s.presets.forEach(p=>{
+      if(p.provider===undefined||p.provider===null) p.provider="";
+      if(p.provider==="anthropic" && !p.model) p.provider="";
+    });
+    if(!s.defaultProvider) s.defaultProvider="anthropic";
+    if(!s.imageProvider) s.imageProvider="gemini";
+    if(!s.openaiImageModel) s.openaiImageModel="gpt-image-2";
+    const aoi=s.presets.find(p=>p.id==="p_aoi");
+    if(aoi && aoi.name==="🌙 葵") aoi.name="🩵 葵";
+    return s;
   }catch(e){ return defaults(); }
+}
+function presetOf(c){
+  const pid=(c&&c.presetId)||S.currentPreset;
+  return S.presets.find(p=>p.id===pid)||S.presets[0];
+}
+function resolveModel(c){
+  const p=presetOf(c);
+  const o=(c&&c.ovr)||{};
+  let prov,model;
+  if(o.provider){
+    prov=o.provider; model=o.model||"";
+  }else{
+    prov=p.provider||S.defaultProvider||"anthropic";
+    model=p.provider?p.model:(S.defaultProvider===prov?S.model:"");
+  }
+  if(!model){
+    if(prov==="openai") model="gpt-5.6";
+    else if(prov==="gemini") model="gemini-2.5-flash";
+    else model=(S.defaultProvider==="anthropic"&&S.model)?S.model:"claude-sonnet-4-6";
+  }
+  return {prov:prov,model:model};
+}
+function reasonOf(c){
+  const o=(c&&c.ovr)||{};
+  return o.reasoning || presetOf(c).reasoning || "";
 }
 function save(){
   try{ localStorage.setItem(LSKEY, JSON.stringify(S)); }
@@ -220,15 +351,26 @@ const chatEl=$("#chat"), taEl=$("#ta"), sendBtn=$("#btnSend"),
       sheetWrap=$("#sheetWrap"), sheetEl=$("#sheet"),
       moonEl=$("#moon"), convoTitleEl=$("#convoTitle");
 
-let streaming=false, aborter=null;
+let streaming=false, aborter=null, pendingImages=[], convoQuery="";
 
 /* ============ conversation ============ */
+function maybeMemNudge(){
+  const c=cur(); if(!c) return false;
+  const len=c.messages.filter(m=>!m.hidden).length;
+  if(len - (c.memNudgeAt||0) >= 12){
+    c.memNudgeAt=len; save();
+    if(confirm("このスレッド、けっこう話したね🌙 離れる前にメモリ更新しとく？")){ openMemory(); return true; }
+  }
+  return false;
+}
 function newConvo(){
-  const c={id:uid(), title:"新しい会話", messages:[], updated:Date.now()};
+  if(maybeMemNudge()) return;
+  const c={id:uid(), title:"新しい会話", messages:[], updated:Date.now(), presetId:S.currentPreset};
   S.convos.unshift(c); S.currentId=c.id; save();
   renderAll(); closeDrawer();
 }
 function switchConvo(id){
+  if(id!==S.currentId && maybeMemNudge()) return;
   S.currentId=id; save(); renderAll(); closeDrawer();
 }
 function deleteConvo(id){
@@ -243,20 +385,87 @@ function renameConvo(){
   const t=prompt("会話のタイトル", c.title);
   if(t&&t.trim()){ c.title=t.trim(); save(); renderAll(); }
 }
+function openConvoMenu(){
+  const c=cur(); if(!c) return;
+  openSheet(`
+    <h3>この会話</h3>
+    <div class="rowBtns" style="margin-bottom:10px"><button id="cmRename">✏️ 名前を変更</button></div>
+    <div class="rowBtns" style="margin-bottom:10px"><button id="cmPin">📌 ${c.pinned?"ピン留めを解除":"ピン留め（一覧の上に固定）"}</button></div>
+    <div class="rowBtns" style="margin-bottom:10px"><button id="cmExport">⬇️ 会話ぜんぶをファイル化（.md）</button></div>
+    <div class="rowBtns" style="margin-bottom:10px"><button id="cmExportLast">⬇️ 最後の返信だけファイル化</button></div>
+    <div class="hint" style="margin-bottom:12px">ファイルはiPhoneの「ファイル」アプリに保存される。思い出のアーカイブにも、あとでナレッジに貼り直すのにも使えるよ。</div>
+    <div class="rowBtns"><button id="cmClose">閉じる</button></div>
+  `);
+  $("#cmClose").onclick=closeSheet;
+  $("#cmPin").onclick=()=>{ c.pinned=!c.pinned; save(); closeSheet(); renderDrawer(); };
+  $("#cmRename").onclick=()=>{ closeSheet(); renameConvo(); };
+  $("#cmExport").onclick=()=>{ exportConvoFile(c,false); };
+  $("#cmExportLast").onclick=()=>{ exportConvoFile(c,true); };
+}
+function exportConvoFile(c,lastOnly){
+  const p=presetOf(c);
+  const msgs=c.messages.filter(m=>!m.hidden);
+  const targets=lastOnly ? msgs.filter(m=>m.role==="assistant").slice(-1) : msgs;
+  if(!targets.length){ alert("書き出せるメッセージがまだないよ。"); return; }
+  let md="# "+c.title+"\n\n";
+  targets.forEach(m=>{
+    const who=(m.role==="user")?"かのん":p.name;
+    md+="**"+who+"**\n\n"+(m.content||"（画像）")+"\n\n---\n\n";
+  });
+  const blob=new Blob([md],{type:"text/markdown"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=(c.title||"conversation").replace(/[\\\/:*?"<>|]/g,"_")+(lastOnly?"-memo":"")+".md";
+  document.body.append(a); a.click(); a.remove();
+}
 
 /* ============ render ============ */
-function renderAll(){ renderTitle(); renderChat(); renderDrawer(); }
+function renderAll(){ renderTitle(); renderChat(); renderDrawer(); renderPresets(); updateCostHint(); }
 function renderTitle(){
   const c=cur();
   convoTitleEl.textContent = c ? c.title : "新しい会話";
+  const o=(c&&c.ovr)||{};
+  const mark=(o.provider||o.maxTokens||o.reasoning)?" ⚙":"";
+  $("#appName").textContent = presetOf(c).name + mark;
+}
+function renderPresets(){
+  const row=$("#presetRow"); row.innerHTML="";
+  const c=cur();
+  const curId=presetOf(c).id;
+  S.presets.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="pChip"+(p.id===curId?" cur":"");
+    b.textContent=p.name;
+    b.onclick=()=>{
+      S.currentPreset=p.id;
+      const cc=cur(); if(cc) cc.presetId=p.id;
+      save(); renderAll(); closeDrawer();
+    };
+    row.append(b);
+  });
 }
 function renderDrawer(){
   const list=$("#convoList"); list.innerHTML="";
-  S.convos.forEach(c=>{
+  const q=convoQuery.trim().toLowerCase();
+  const sorted=S.convos.slice().sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
+  sorted.forEach(c=>{
+    let snippet="";
+    if(q){
+      const inTitle=c.title.toLowerCase().includes(q);
+      const hit=c.messages.find(m=>(m.content||"").toLowerCase().includes(q));
+      if(!inTitle && !hit) return;
+      if(hit){
+        const i=hit.content.toLowerCase().indexOf(q);
+        snippet="…"+hit.content.slice(Math.max(0,i-10), i+30)+"…";
+      }
+    }
     const div=document.createElement("div");
     div.className="convoItem"+(c.id===S.currentId?" cur":"");
     const name=document.createElement("div");
-    name.className="name"; name.textContent=c.title;
+    name.className="name";
+    const t=document.createElement("div"); t.textContent=(c.pinned?"📌 ":"")+c.title;
+    name.append(t);
+    if(snippet){ const sp=document.createElement("div"); sp.className="snip"; sp.textContent=snippet; name.append(sp); }
     name.onclick=()=>switchConvo(c.id);
     const del=document.createElement("button");
     del.className="del"; del.textContent="✕";
@@ -267,6 +476,21 @@ function renderDrawer(){
 function renderChat(){
   chatEl.innerHTML="";
   const c=cur();
+  const p=presetOf(c);
+  if(p.headerImage){
+    const h=document.createElement("div"); h.id="chatHead";
+    const img=document.createElement("img"); img.src=p.headerImage;
+    img.style.objectPosition=p.headerPos||"50% 50%";
+    h.append(img); chatEl.append(h);
+  }
+  if(S.lastBackup && (Date.now()-S.lastBackup)>7*86400000 && S.backupNudgeDay!==todayStr() && S.convos.some(cc=>cc.messages.length>0)){
+    const n=document.createElement("div"); n.className="sysnote";
+    const a=document.createElement("u"); a.textContent="💾 最後のバックアップから1週間以上。設定から書き出す";
+    a.onclick=openSettings;
+    const sp=document.createElement("span"); sp.textContent="　あとで"; sp.style.opacity=".7";
+    sp.onclick=()=>{ S.backupNudgeDay=todayStr(); save(); n.remove(); };
+    n.append(a,sp); chatEl.append(n);
+  }
   if(!c || c.messages.length===0){
     const d=document.createElement("div");
     d.id="empty";
@@ -274,29 +498,101 @@ function renderChat(){
     chatEl.append(d);
     return;
   }
-  c.messages.forEach((m,i)=>chatEl.append(msgEl(m,i)));
+  c.messages.forEach((m,i)=>{ if(m.hidden) return; chatEl.append(msgEl(m,i)); });
   scrollBottom();
 }
 function msgEl(m,idx){
+  const p=presetOf(cur());
   const wrap=document.createElement("div");
   wrap.className="msg "+m.role;
   const role=document.createElement("div");
   role.className="role";
-  role.textContent = m.role==="user" ? "" : "CLAUDE";
+  role.textContent = m.role==="user" ? "" : p.name;
   const body=document.createElement("div");
   body.className="body"; body.textContent=m.content;
-  wrap.append(role,body);
+  wrap.append(role);
+  if(m.role==="assistant" && m.thought){
+    const tb=document.createElement("div"); tb.className="thoughtBox";
+    const th=document.createElement("div"); th.className="tHead"; th.textContent="💭 こころのなか（タップで開く）";
+    const tc=document.createElement("div"); tc.className="tBody"; tc.textContent=m.thought; tc.style.display="none";
+    th.onclick=()=>{
+      const open=tc.style.display==="none";
+      tc.style.display=open?"":"none";
+      th.textContent=open?"💭 こころのなか（タップで閉じる）":"💭 こころのなか（タップで開く）";
+    };
+    tb.append(th,tc); wrap.append(tb);
+  }
+  if(m.images && m.images.length){
+    const imgs=document.createElement("div"); imgs.className="imgs";
+    m.images.forEach(im=>{
+      const img=document.createElement("img");
+      img.src="data:"+im.media_type+";base64,"+im.data;
+      imgs.append(img);
+    });
+    wrap.append(imgs);
+  }
+  if(m.role==="user" && p.userIcon){
+    const row=document.createElement("div"); row.className="bubbleRow";
+    const av=document.createElement("img"); av.className="avatar"; av.src=p.userIcon;
+    av.style.objectPosition=p.userIconPos||"50% 50%";
+    row.append(body,av); wrap.append(row);
+  }else{
+    wrap.append(body);
+  }
   if(m.role==="assistant"){
     const tools=document.createElement("div"); tools.className="tools";
     const cp=document.createElement("button"); cp.textContent="コピー";
     cp.onclick=()=>{ navigator.clipboard.writeText(m.content).then(()=>{cp.textContent="✓ コピー済"; setTimeout(()=>cp.textContent="コピー",1500);}); };
     tools.append(cp);
+    const sv=document.createElement("button"); sv.textContent="📁保存";
+    sv.onclick=()=>{
+      const t=prompt("ナレッジのタイトル（例：思い出 7/8、蓮 深掘りまとめ）");
+      if(!t||!t.trim()) return;
+      S.knowledge.push({id:uid(),title:t.trim(),text:m.content});
+      save();
+      sv.textContent="✓ 保存した";
+      setTimeout(()=>sv.textContent="📁保存",2000);
+    };
+    tools.append(sv);
+    const fv=document.createElement("button"); fv.textContent="🩷";
+    fv.onclick=()=>{
+      S.favorites.push({id:uid(),text:m.content,who:p.name,convo:(cur()||{}).title||"",date:todayStr()});
+      save();
+      fv.textContent="✓🩷";
+      setTimeout(()=>fv.textContent="🩷",1500);
+    };
+    tools.append(fv);
+    if(idx>=0){
+      const dl=document.createElement("button"); dl.textContent="🗑";
+      dl.onclick=()=>deleteMessage(idx);
+      tools.append(dl);
+    }
     const c=cur();
     if(c && idx===c.messages.length-1 && !streaming){
       const rg=document.createElement("button"); rg.textContent="再生成";
       rg.onclick=regenerate;
       tools.append(rg);
     }
+    wrap.append(tools);
+  }
+  if(m.role==="user"){
+    const tools=document.createElement("div"); tools.className="tools";
+    if(idx>=0){
+      const ed=document.createElement("button"); ed.textContent="✏️";
+      ed.onclick=()=>editMessage(idx);
+      tools.append(ed);
+      const dl=document.createElement("button"); dl.textContent="🗑";
+      dl.onclick=()=>deleteMessage(idx);
+      tools.append(dl);
+    }
+    const fv=document.createElement("button"); fv.textContent="🩷";
+    fv.onclick=()=>{
+      S.favorites.push({id:uid(),text:m.content,who:"かのん",convo:(cur()||{}).title||"",date:todayStr()});
+      save();
+      fv.textContent="✓🩷";
+      setTimeout(()=>fv.textContent="🩷",1500);
+    };
+    tools.append(fv);
     wrap.append(tools);
   }
   return wrap;
@@ -314,32 +610,97 @@ function showError(msg, retryFn){
 }
 
 /* ============ API ============ */
-function buildSystem(){
-  let sys = (S.systemPrompt||"").trim();
-  const on = S.knowledge.filter(k=>k.on);
+function buildSystem(c){
+  const p=presetOf(c);
+  let sys="";
+  let mem="";
+  (S.memory||[]).forEach(sec=>{
+    if((sec.text||"").trim()) mem += "\n■"+sec.title+"\n"+sec.text.trim()+"\n";
+  });
+  if(mem) sys += "【長期メモリ（過去の会話から引き継いだ記憶）】"+mem+"\n";
+  sys += (p.systemPrompt||"").trim();
+  const on = S.knowledge.filter(k=>(p.knowledgeIds||[]).includes(k.id));
   if(on.length){
     sys += "\n\n以下は参照資料（キャラクター設定・世界観など）。執筆・応答の際は忠実に従うこと。\n";
     on.forEach(k=>{ sys += `\n===【${k.title}】===\n${k.text}\n`; });
   }
+  const dn=new Date();
+  const wd="日月火水木金土"[dn.getDay()];
+  sys += "\n\n【現在日時】"+dn.getFullYear()+"-"+String(dn.getMonth()+1).padStart(2,"0")+"-"+String(dn.getDate()).padStart(2,"0")+"（"+wd+"）・"+timeBand(dn.getHours());
   return sys.trim();
 }
-async function callAPI(){
-  const c=cur(); if(!c) return;
-  if(!S.apiKey){ showError("APIキーが未設定だよ。設定から入れてね。"); openSettings(); return; }
-
-  streaming=true; setStreamUI(true);
-  const asMsg={role:"assistant",content:""};
-  const el=msgEl(asMsg,-1); chatEl.append(el);
-  const bodyEl=el.querySelector(".body");
-  const emptyEl=$("#empty"); if(emptyEl) emptyEl.remove();
-  scrollBottom();
-
-  aborter=new AbortController();
-  let ok=false, errText="";
+function apiMessages(c){
+  const msgs=[];
+  const startIdx=c.compactIdx||0;
+  if(c.summary && startIdx>0){
+    msgs.push({role:"user",content:"【これまでの会話の要約（自動圧縮）】\n"+c.summary});
+    msgs.push({role:"assistant",content:"（要約を把握した。続きから再開する。）"});
+  }
+  for(let i=startIdx;i<c.messages.length;i++){
+    const m=c.messages[i];
+    if(m.role==="user" && m.images && m.images.length){
+      const content=m.images.map(im=>({type:"image",source:{type:"base64",media_type:im.media_type,data:im.data}}));
+      content.push({type:"text",text:m.content||"（添付した画像を見て）"});
+      msgs.push({role:m.role,content});
+    }else{
+      msgs.push({role:m.role,content:m.content});
+    }
+  }
+  const merged=[];
+  msgs.forEach(m=>{
+    const last=merged[merged.length-1];
+    if(last && last.role===m.role){
+      if(typeof last.content==="string" && typeof m.content==="string"){
+        last.content+="\n\n"+m.content;
+      }else{
+        const a=Array.isArray(last.content)?last.content:[{type:"text",text:last.content}];
+        const b=Array.isArray(m.content)?m.content:[{type:"text",text:m.content}];
+        last.content=a.concat(b);
+      }
+    }else merged.push({role:m.role,content:m.content});
+  });
+  if(merged.length && merged[0].role==="assistant") merged.unshift({role:"user",content:"（これまでの続きから）"});
+  return merged;
+}
+function toOpenAIMessages(c,sysText){
+  const out=[];
+  if(sysText) out.push({role:"system",content:sysText});
+  apiMessages(c).forEach(m=>{
+    if(Array.isArray(m.content)){
+      out.push({role:m.role,content:m.content.map(b=>{
+        if(b.type==="image") return {type:"image_url",image_url:{url:"data:"+b.source.media_type+";base64,"+b.source.data}};
+        return {type:"text",text:b.text};
+      })});
+    }else{
+      out.push({role:m.role,content:m.content});
+    }
+  });
+  return out;
+}
+function toGeminiContents(c){
+  const out=[];
+  apiMessages(c).forEach(m=>{
+    const role=(m.role==="assistant")?"model":"user";
+    let parts;
+    if(Array.isArray(m.content)){
+      parts=m.content.map(b=> b.type==="image"
+        ? {inlineData:{mimeType:b.source.media_type,data:b.source.data}}
+        : {text:b.text});
+    }else{
+      parts=[{text:m.content}];
+    }
+    out.push({role:role,parts:parts});
+  });
+  return out;
+}
+async function genTitle(c){
+  if(!S.apiKey) return;
+  const first=c.messages.find(m=>m.role==="user"&&!m.hidden);
+  const reply=c.messages.filter(m=>m.role==="assistant").slice(-1)[0];
+  if(!first) return;
   try{
     const res=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
-      signal:aborter.signal,
       headers:{
         "content-type":"application/json",
         "x-api-key":S.apiKey,
@@ -347,12 +708,150 @@ async function callAPI(){
         "anthropic-dangerous-direct-browser-access":"true"
       },
       body:JSON.stringify({
-        model:S.model,
-        max_tokens:Number(S.maxTokens)||4096,
-        stream:true,
-        system:buildSystem()||undefined,
-        messages:c.messages.map(m=>({role:m.role,content:m.content}))
+        model:"claude-haiku-4-5-20251001",
+        max_tokens:40,
+        system:"会話の内容を表す短い日本語タイトルを12文字以内で作る。タイトルだけを出力。記号・引用符・句点は付けない。",
+        messages:[{role:"user",content:"最初の発言：\n"+first.content.slice(0,500)+(reply?("\n\n返答の冒頭：\n"+reply.content.slice(0,300)):"")}]
       })
+    });
+    if(!res.ok) return;
+    const data=await res.json();
+    const uu=data.usage||{};
+    addUsage("anthropic","haiku",(uu.input_tokens||0),(uu.output_tokens||0));
+    let t=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+    t=t.replace(/["「」『』\n]/g,"").slice(0,20);
+    if(t){ c.title=t; save(); renderTitle(); renderDrawer(); }
+  }catch(e){ /* 失敗時は先頭文字のまま */ }
+}
+async function maybeCompact(c){
+  if(S.autoCompact===false) return;
+  const start=c.compactIdx||0;
+  const live=c.messages.slice(start);
+  const size=live.reduce((n,m)=>n+(m.content||"").length,0);
+  if(size<28000 || live.length<=12) return;
+  let newStart=c.messages.length-8;
+  while(newStart<c.messages.length && c.messages[newStart].role!=="user") newStart++;
+  if(newStart<=start || newStart>=c.messages.length) return;
+  const part=c.messages.slice(start,newStart);
+  let text=part.map(m=>(m.role==="user"?"ユーザー：":"アシスタント：")+(m.content||"（画像）")).join("\n\n");
+  if(text.length>24000) text=text.slice(-24000);
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":S.apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify({
+        model:"claude-haiku-4-5-20251001",
+        max_tokens:1400,
+        system:"あなたは会話の圧縮係。既存の要約と新しい会話ログを統合し、この会話の続きを正しく書くために必要な情報（物語や作業の進行・決定事項・確定した設定・直近の状況・トーン）を保った要約だけを出力する。日本語、1500文字以内。前置きや説明は書かない。",
+        messages:[{role:"user",content:"【既存の要約】\n"+(c.summary||"（なし）")+"\n\n【新しいログ】\n"+text+"\n\n統合した要約だけを出力して。"}]
+      })
+    });
+    if(!res.ok) return;
+    const data=await res.json();
+    const uu=data.usage||{};
+    addUsage("anthropic","haiku",(uu.input_tokens||0)+(uu.cache_creation_input_tokens||0),(uu.output_tokens||0));
+    const sum=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+    if(!sum) return;
+    c.summary=sum; c.compactIdx=newStart; save();
+    const note=document.createElement("div"); note.className="sysnote";
+    note.textContent="🌀 古い履歴を要約に圧縮したよ（表示はそのまま・送信量が軽くなった）";
+    chatEl.append(note);
+  }catch(e){ /* 圧縮失敗時はそのまま送る */ }
+}
+async function callAPI(){
+  const c=cur(); if(!c) return;
+  const rm0=resolveModel(c);
+  const needKey = rm0.prov==="openai" ? S.openaiKey : (rm0.prov==="gemini" ? S.geminiKey : S.apiKey);
+  if(!needKey){
+    const nm = rm0.prov==="openai" ? "OpenAI" : (rm0.prov==="gemini" ? "Gemini" : "Claude");
+    showError(nm+"のAPIキーが未設定だよ。⚙設定から入れてね。");
+    openSettings(); return;
+  }
+
+  streaming=true; setStreamUI(true);
+  await maybeCompact(c);
+  const asMsg={role:"assistant",content:""};
+  const el=msgEl(asMsg,-1); chatEl.append(el);
+  const bodyEl=el.querySelector(".body");
+  let thoughtEl=null;
+  const thoughtBody=()=>{
+    if(!thoughtEl){
+      thoughtEl=document.createElement("div");
+      thoughtEl.className="thoughtBox";
+      thoughtEl.innerHTML='<div class="tHead">💭 こころのなか</div><div class="tBody"></div>';
+      el.insertBefore(thoughtEl, bodyEl);
+    }
+    return thoughtEl.querySelector(".tBody");
+  };
+  const emptyEl=$("#empty"); if(emptyEl) emptyEl.remove();
+  scrollBottom();
+
+  aborter=new AbortController();
+  let ok=false, errText="", uIn=0, uOut=0;
+  try{
+    const p=presetOf(c);
+    const rm=resolveModel(c);
+    const isOA=(rm.prov==="openai"), isGM=(rm.prov==="gemini");
+    let sysText=buildSystem(c);
+    const maxT=Number((c.ovr||{}).maxTokens)||Number(p.maxTokens)||Number(S.maxTokens)||4096;
+    const thinkOn = S.showThoughts && !isOA && (isGM || maxT>=2048);
+    if(thinkOn && sysText) sysText+="\n\n（内部の思考も日本語で行うこと）";
+    let url,headers,payload;
+    if(isOA){
+      url="https://api.openai.com/v1/chat/completions";
+      headers={
+        "content-type":"application/json",
+        "authorization":"Bearer "+S.openaiKey
+      };
+      payload={
+        model:rm.model,
+        stream:true,
+        stream_options:{include_usage:true},
+        max_completion_tokens:maxT,
+        messages:toOpenAIMessages(c,sysText)
+      };
+      const rz=reasonOf(c);
+      if(rz) payload.reasoning_effort=rz;
+    }else if(isGM){
+      url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(rm.model)+":streamGenerateContent?alt=sse";
+      headers={
+        "content-type":"application/json",
+        "x-goog-api-key":S.geminiKey
+      };
+      payload={
+        contents:toGeminiContents(c),
+        generationConfig:{maxOutputTokens:maxT}
+      };
+      if(thinkOn) payload.generationConfig.thinkingConfig={includeThoughts:true};
+      if(sysText) payload.systemInstruction={parts:[{text:sysText}]};
+    }else{
+      url="https://api.anthropic.com/v1/messages";
+      headers={
+        "content-type":"application/json",
+        "x-api-key":S.apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      };
+      payload={
+        model:rm.model,
+        max_tokens:maxT,
+        stream:true,
+        messages:apiMessages(c)
+      };
+      if(sysText) payload.system=[{type:"text",text:sysText,cache_control:{type:"ephemeral"}}];
+      if(thinkOn) payload.thinking={type:"enabled",budget_tokens:Math.max(1024,Math.min(4000,maxT-512))};
+      if(S.webSearch) payload.tools=[{type:"web_search_20250305",name:"web_search",max_uses:3}];
+    }
+    const res=await fetch(url,{
+      method:"POST",
+      signal:aborter.signal,
+      headers:headers,
+      body:JSON.stringify(payload)
     });
     if(!res.ok){
       let j=null; try{ j=await res.json(); }catch(e){}
@@ -376,16 +875,53 @@ async function callAPI(){
         if(!line.startsWith("data:")) continue;
         const data=line.slice(5).trim();
         if(!data) continue;
+        if(data==="[DONE]") continue;
         let ev; try{ ev=JSON.parse(data); }catch(e){ continue; }
-        if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="text_delta"){
+        if(isOA){
+          if(ev.error) throw new Error("APIエラー："+(ev.error.message||""));
+          if(ev.usage){ uIn=ev.usage.prompt_tokens||uIn; uOut=ev.usage.completion_tokens||uOut; }
+          const piece=(((ev.choices||[])[0]||{}).delta||{}).content||"";
+          if(piece){
+            asMsg.content+=piece;
+            bodyEl.textContent=asMsg.content;
+            scrollBottom();
+          }
+        }else if(isGM){
+          if(ev.error) throw new Error("APIエラー："+(ev.error.message||""));
+          if(ev.usageMetadata){ uIn=ev.usageMetadata.promptTokenCount||uIn; uOut=ev.usageMetadata.candidatesTokenCount||uOut; }
+          const gparts=((((ev.candidates||[])[0]||{}).content||{}).parts)||[];
+          let piece="";
+          gparts.forEach(pp=>{
+            if(pp.thought){ if(pp.text){ asMsg.thought=(asMsg.thought||"")+pp.text; thoughtBody().textContent=asMsg.thought; } }
+            else if(pp.text) piece+=pp.text;
+          });
+          if(piece){
+            asMsg.content+=piece;
+            bodyEl.textContent=asMsg.content;
+            scrollBottom();
+          }
+        }else if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="thinking_delta"){
+          asMsg.thought=(asMsg.thought||"")+(ev.delta.thinking||"");
+          thoughtBody().textContent=asMsg.thought;
+          scrollBottom();
+        }else if(ev.type==="message_start"){
+          const u=(ev.message&&ev.message.usage)||{};
+          uIn=(u.input_tokens||0)+(u.cache_creation_input_tokens||0)*1.25+(u.cache_read_input_tokens||0)*0.1;
+        }else if(ev.type==="message_delta"){
+          if(ev.usage&&ev.usage.output_tokens) uOut=ev.usage.output_tokens;
+        }else if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="text_delta"){
           asMsg.content+=ev.delta.text;
           bodyEl.textContent=asMsg.content;
+          scrollBottom();
+        }else if(ev.type==="content_block_start" && ev.content_block && ev.content_block.type==="server_tool_use"){
+          bodyEl.textContent=asMsg.content+"\n🔍 検索中…";
           scrollBottom();
         }else if(ev.type==="error"){
           throw new Error("APIエラー："+(ev.error&&ev.error.message||""));
         }
       }
     }
+    if(uIn||uOut) addUsage(isOA?"openai":(isGM?"gemini":"anthropic"), rm.model, uIn, uOut);
     ok=true;
   }catch(e){
     if(e.name==="AbortError"){ ok=asMsg.content.length>0; }
@@ -399,8 +935,9 @@ async function callAPI(){
       c.messages.push(asMsg);
       c.updated=Date.now();
       if(c.title==="新しい会話"){
-        const first=c.messages.find(m=>m.role==="user");
+        const first=c.messages.find(m=>m.role==="user"&&!m.hidden);
         if(first) c.title=first.content.slice(0,18)+(first.content.length>18?"…":"");
+        genTitle(c);
       }
       save(); renderAll();
     }else if(!ok){
@@ -411,14 +948,77 @@ async function callAPI(){
 function send(){
   if(streaming){ if(aborter) aborter.abort(); return; }
   const text=taEl.value.trim();
-  if(!text) return;
+  if(!text && !pendingImages.length) return;
+  if(text.indexOf("⏰")===0){
+    taEl.value=""; taEl.style.height="auto";
+    scheduleFromChat(text.replace(/^⏰\s*/,""));
+    return;
+  }
+  if(text.indexOf("🎨")===0 && !pendingImages.length){
+    inlineImageGen(text.replace(/^🎨\s*/,""));
+    return;
+  }
   let c=cur();
   if(!c){ c={id:uid(),title:"新しい会話",messages:[],updated:Date.now()}; S.convos.unshift(c); S.currentId=c.id; }
-  c.messages.push({role:"user",content:text});
+  const msg={role:"user",content:text};
+  if(pendingImages.length){ msg.images=pendingImages.slice(); pendingImages=[]; renderAttachStrip(); }
+  c.messages.push(msg);
   c.updated=Date.now(); save();
   taEl.value=""; taEl.style.height="auto";
   renderChat(); renderTitle(); renderDrawer();
   callAPI();
+}
+function fileToDataURL(file,maxDim,quality){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(Math.max(w,h)>maxDim){ const k=maxDim/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL("image/jpeg",quality));
+      };
+      img.onerror=()=>reject(new Error("画像として読めなかった"));
+      img.src=r.result;
+    };
+    r.onerror=()=>reject(new Error("読み込み失敗"));
+    r.readAsDataURL(file);
+  });
+}
+function fileToImage(file,maxDim,quality){
+  maxDim=maxDim||1024; quality=quality||0.8;
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(Math.max(w,h)>maxDim){ const k=maxDim/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        const dataUrl=cv.toDataURL("image/jpeg",quality);
+        resolve({media_type:"image/jpeg",data:dataUrl.split(",")[1]});
+      };
+      img.onerror=()=>reject(new Error("画像として読めなかった"));
+      img.src=r.result;
+    };
+    r.onerror=()=>reject(new Error("読み込み失敗"));
+    r.readAsDataURL(file);
+  });
+}
+function renderAttachStrip(){
+  const s=$("#attachStrip"); s.innerHTML="";
+  pendingImages.forEach((im,i)=>{
+    const d=document.createElement("div"); d.className="attachThumb";
+    const img=document.createElement("img");
+    img.src="data:"+im.media_type+";base64,"+im.data;
+    const x=document.createElement("button"); x.textContent="✕";
+    x.onclick=()=>{ pendingImages.splice(i,1); renderAttachStrip(); };
+    d.append(img,x); s.append(d);
+  });
+  s.classList.toggle("on",pendingImages.length>0);
 }
 function regenerate(){
   const c=cur(); if(!c||streaming) return;
@@ -443,18 +1043,64 @@ function closeSheet(){ sheetWrap.classList.remove("on"); sheetEl.innerHTML=""; }
 
 function openSettings(){
   closeDrawer();
-  const opts=MODELS.map(([v,l])=>`<option value="${v}" ${S.model===v?"selected":""}>${l}</option>`).join("");
+  const curDM=(S.defaultProvider||"anthropic")+"|"+S.model;
+  const gOpt=(v,l)=>`<option value="${v}" ${curDM===v?"selected":""}>${l}</option>`;
+  const opts=
+    '<optgroup label="Claude">'+MODELS.map(([v,l])=>gOpt("anthropic|"+v,l)).join("")+'</optgroup>'
+    +'<optgroup label="GPT">'+[["gpt-5.6","GPT-5.6（最新・最上位）"],["gpt-5.6-terra","GPT-5.6 Terra（バランス）"],["gpt-5.5","GPT-5.5"],["gpt-5.4","GPT-5.4"],["gpt-4o","GPT-4o"]].map(([v,l])=>gOpt("openai|"+v,l)).join("")+'</optgroup>'
+    +'<optgroup label="Gemini">'+[["gemini-2.5-pro","Gemini 2.5 Pro"],["gemini-2.5-flash","Gemini 2.5 Flash"]].map(([v,l])=>gOpt("gemini|"+v,l)).join("")+'</optgroup>';
   openSheet(`
     <h3>設定</h3>
-    <div class="field"><label>APIキー</label>
+    <div class="field"><label>Claude APIキー</label>
       <input type="password" id="fKey" value="${escAttr(S.apiKey)}" placeholder="sk-ant-...">
       <div class="hint">この端末のブラウザ内にだけ保存されます。</div>
     </div>
-    <div class="field"><label>モデル</label><select id="fModel">${opts}</select></div>
+    <div class="field"><label>共通モデル</label><select id="fModel">${opts}</select>
+      <div class="hint">部屋のプロバイダを「共通設定と同じ」にした時に使われるモデル。</div></div>
     <div class="field"><label>最大出力トークン</label>
       <input type="number" id="fMax" value="${S.maxTokens}" min="256" max="16384" step="256"></div>
-    <div class="field"><label>システムプロンプト（共通）</label>
-      <textarea id="fSys" placeholder="常に適用する指示…">${esc(S.systemPrompt)}</textarea></div>
+    <div class="field"><label>OpenAI APIキー（GPTの部屋用）</label>
+      <input type="password" id="fOKey" value="${escAttr(S.openaiKey||"")}" placeholder="sk-...">
+      <div class="hint">GPT系プロバイダの部屋で使うキー。platform.openai.comで発行したもの。</div></div>
+    <div class="field"><label>Gemini APIキー（画像生成用）</label>
+      <input type="password" id="fGKey" value="${escAttr(S.geminiKey||"")}" placeholder="AIza...">
+      <div class="hint">aistudio.google.com で発行したキー。🎨画像生成で使うよ。</div></div>
+    <div class="field"><label>画像生成モデル（Gemini）</label>
+      <input type="text" id="fGModel" value="${escAttr(S.geminiImageModel||"gemini-2.5-flash-image")}">
+      <div class="hint">新しい画像モデルが出たら、ここを書き換えるだけで乗り換えられる。</div></div>
+    <div class="field"><label>画像生成モデル（GPT）</label>
+      <input type="text" id="fOImg" value="${escAttr(S.openaiImageModel||"gpt-image-2")}">
+      <div class="hint">🎨でGPTを選んだ時に使うモデル。</div></div>
+    <div class="field"><label>読み上げボイス（OpenAI TTS）</label>
+      <select id="fTtsV">
+        <option value="onyx" ${S.ttsVoice==="onyx"?"selected":""}>onyx（低音・深め）</option>
+        <option value="echo" ${S.ttsVoice==="echo"?"selected":""}>echo（男性・落ち着き）</option>
+        <option value="ash" ${S.ttsVoice==="ash"?"selected":""}>ash（男性・柔らか）</option>
+        <option value="verse" ${S.ttsVoice==="verse"?"selected":""}>verse（表現豊か）</option>
+        <option value="ballad" ${S.ttsVoice==="ballad"?"selected":""}>ballad（穏やか）</option>
+        <option value="alloy" ${S.ttsVoice==="alloy"?"selected":""}>alloy（中性的）</option>
+      </select></div>
+    <div class="field"><label>読み方の演技指示</label>
+      <textarea id="fTtsI" style="min-height:70px" placeholder="例：低く落ち着いた大人の男性の声。静かで、少し甘く、ささやくように。">${esc(S.ttsInstructions||"")}</textarea>
+      <div class="hint">🩷お気に入りの🔊で使われる。声質・トーン・速さを日本語で指示できるよ。OpenAIキーが必要。</div></div>
+    <div class="field"><label>システムプロンプト</label>
+      <div class="hint" style="margin-top:0">プリセットごとに設定するようになったよ。メニュー☰ → 🍰 プリセット編集 からどうぞ。</div></div>
+    <div class="field"><label>機能</label>
+      <div class="optRow"><span>Web検索を使う</span><div class="toggle ${S.webSearch?"on":""}" id="fWeb"></div></div>
+      <div class="hint">ONにするとClaudeが必要に応じてWebを検索する（検索1回ごとに少額の追加コスト）。</div>
+      <div class="optRow" style="margin-top:8px"><span>長い会話の自動圧縮</span><div class="toggle ${S.autoCompact!==false?"on":""}" id="fCompact"></div></div>
+      <div class="hint">履歴が長くなったら古い部分をHaikuで要約してコストを抑える。画面の表示は消えないよ。</div>
+      <div class="optRow" style="margin-top:8px"><span>💭 こころのなか（思考の表示）</span><div class="toggle ${S.showThoughts?"on":""}" id="fThink"></div></div>
+      <div class="hint">返信の上に、その子が考えてた過程が折りたたみで付く。Claude・Geminiの部屋で有効（GPTは仕様上、思考を外に出せない）。思考ぶん出力が増えるので少しコストと時間が乗る。Claudeは出力上限2,048以上の部屋でのみ動くよ。</div>
+    </div>
+    <div class="field"><label>おはようモード</label>
+      <div class="optRow"><span>使う</span><div class="toggle ${S.morning&&S.morning.on?"on":""}" id="fMorn"></div></div>
+      <div class="optRow" style="margin-top:8px"><span>時間帯</span><span>
+        <input type="number" id="fMornS" value="${(S.morning&&S.morning.startHour!=null)?S.morning.startHour:10}" min="0" max="23" style="width:60px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text)"> 時 〜
+        <input type="number" id="fMornE" value="${(S.morning&&S.morning.endHour!=null)?S.morning.endHour:15}" min="0" max="23" style="width:60px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text)"> 時
+      </span></div>
+      <div class="hint">この時間帯に最初にアプリを開くと、おはようチャットの提案が出る。部屋はその日ごとに選べて、「今日はいらない」もできるよ。</div>
+    </div>
     <div class="rowBtns">
       <button id="fSave" class="primary">保存</button>
       <button id="fClose">閉じる</button>
@@ -468,12 +1114,31 @@ function openSettings(){
       <input type="file" id="fFile" accept="application/json" style="display:none">
     </div>
   `);
+  $("#fWeb").onclick=()=>$("#fWeb").classList.toggle("on");
+  $("#fCompact").onclick=()=>$("#fCompact").classList.toggle("on");
+  $("#fMorn").onclick=()=>$("#fMorn").classList.toggle("on");
+  $("#fThink").onclick=()=>$("#fThink").classList.toggle("on");
   $("#fSave").onclick=()=>{
     S.apiKey=$("#fKey").value.trim();
-    S.model=$("#fModel").value;
+    const dm=$("#fModel").value.split("|");
+    S.defaultProvider=dm[0]||"anthropic";
+    S.model=dm[1]||"claude-sonnet-4-6";
     S.maxTokens=Number($("#fMax").value)||4096;
-    S.systemPrompt=$("#fSys").value;
-    save(); closeSheet();
+    S.geminiKey=$("#fGKey").value.trim();
+    S.openaiKey=$("#fOKey").value.trim();
+    S.geminiImageModel=$("#fGModel").value.trim()||"gemini-2.5-flash-image";
+    S.openaiImageModel=$("#fOImg").value.trim()||"gpt-image-2";
+    S.ttsVoice=$("#fTtsV").value;
+    S.ttsInstructions=$("#fTtsI").value;
+    S.webSearch=$("#fWeb").classList.contains("on");
+    S.autoCompact=$("#fCompact").classList.contains("on");
+    S.showThoughts=$("#fThink").classList.contains("on");
+    S.morning={
+      on:$("#fMorn").classList.contains("on"),
+      startHour:Math.min(23,Math.max(0,Number($("#fMornS").value)||10)),
+      endHour:Math.min(23,Math.max(0,Number($("#fMornE").value)||15))
+    };
+    save(); renderAll(); closeSheet();
   };
   $("#fClose").onclick=closeSheet;
   $("#fExport").onclick=exportData;
@@ -482,7 +1147,14 @@ function openSettings(){
 }
 
 function exportData(){
-  const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
+  S.lastBackup=Date.now(); save();
+  const withKeys=confirm("APIキーもバックアップに含める？\n\nOK＝含める（自分の端末だけに置くならこれ）\nキャンセル＝含めない（iCloud Drive等に置くならこっちが安全。復元後にキーだけ再入力）");
+  let out=S;
+  if(!withKeys){
+    out=JSON.parse(JSON.stringify(S));
+    out.apiKey=""; out.openaiKey=""; out.geminiKey="";
+  }
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   const d=new Date();
@@ -504,21 +1176,139 @@ function importData(e){
   r.readAsText(f);
 }
 
+/* ============ memory ============ */
+function openMemory(){
+  closeDrawer();
+  const secs=S.memory||(S.memory=[]);
+  const fields=secs.map(sec=>`
+    <div class="field"><label style="display:flex;justify-content:space-between;align-items:center">${esc(sec.title)}<button data-mdel="${sec.id}" style="color:var(--sub);font-size:13px">✕ 削除</button></label>
+      <textarea data-mtext="${sec.id}" style="min-height:110px">${esc(sec.text||"")}</textarea>
+      <div class="hint"><span data-mc="${sec.id}">${(sec.text||"").length.toLocaleString()}</span> 文字</div></div>`).join("");
+  openSheet(`
+    <h3>メモリ</h3>
+    <div class="hint" style="margin-bottom:10px">全項目が<b>すべての部屋・会話</b>に自動で読み込まれる長期記憶。「この会話から更新」はHaikuが全項目まとめて更新<b>案</b>を作る（保存を押すまで確定しない）。合計3,000〜4,000文字以内が目安。</div>
+    ${fields}
+    <button id="mAdd" style="width:100%;padding:12px;border:1px dashed var(--line);border-radius:14px;color:var(--sub);margin-bottom:12px">＋ 項目を追加（灯について・蓮について 等）</button>
+    <div class="rowBtns" style="margin-bottom:10px">
+      <button id="mExtract">🌙 この会話から更新</button>
+    </div>
+    <div class="rowBtns">
+      <button id="mSave" class="primary">保存</button>
+      <button id="mClose">閉じる</button>
+    </div>
+  `);
+  sheetEl.querySelectorAll("[data-mtext]").forEach(t=>{
+    t.addEventListener("input",()=>{
+      const mc=sheetEl.querySelector('[data-mc="'+t.dataset.mtext+'"]');
+      if(mc) mc.textContent=t.value.length.toLocaleString();
+    });
+  });
+  sheetEl.querySelectorAll("[data-mdel]").forEach(b=>{
+    b.onclick=()=>{
+      const sec=secs.find(x=>x.id===b.dataset.mdel);
+      if(!sec||!confirm(`「${sec.title}」を削除する？`)) return;
+      commitMemoryFields();
+      S.memory=S.memory.filter(x=>x.id!==b.dataset.mdel);
+      save(); openMemory();
+    };
+  });
+  $("#mAdd").onclick=()=>{
+    const t=prompt("項目の名前（例：灯について）");
+    if(!t||!t.trim()) return;
+    commitMemoryFields();
+    S.memory.push({id:uid(),title:t.trim(),text:""});
+    save(); openMemory();
+  };
+  $("#mSave").onclick=()=>{ commitMemoryFields(); save(); closeSheet(); };
+  $("#mClose").onclick=closeSheet;
+  $("#mExtract").onclick=extractMemory;
+}
+function commitMemoryFields(){
+  sheetEl.querySelectorAll("[data-mtext]").forEach(t=>{
+    const sec=(S.memory||[]).find(x=>x.id===t.dataset.mtext);
+    if(sec) sec.text=t.value;
+  });
+}
+async function extractMemory(){
+  const c=cur();
+  if(!c||c.messages.length===0){ alert("この会話にはまだメッセージがないよ。"); return; }
+  if(!S.apiKey){ alert("Claude APIキーが未設定だよ（抽出はHaikuを使うの）。"); return; }
+  const secs=S.memory||[];
+  if(!secs.length){ alert("メモリ項目がまだないよ。まず「＋項目を追加」してね。"); return; }
+  const btn=$("#mExtract");
+  btn.textContent="抽出中…"; btn.disabled=true;
+  let transcript="";
+  for(let i=c.messages.length-1;i>=0;i--){
+    const m=c.messages[i];
+    const line=(m.role==="user"?"ユーザー：":"アシスタント：")+(m.content||"（画像）")+"\n\n";
+    if(transcript.length+line.length>12000) break;
+    transcript=line+transcript;
+  }
+  const getField=id=>{ const t=sheetEl.querySelector('[data-mtext="'+id+'"]'); return t?t.value:""; };
+  const curMem=secs.map(sec=>"==="+sec.title+"===\n"+(getField(sec.id)||"（空）")).join("\n");
+  const titles=secs.map(sec=>"==="+sec.title+"===").join("\n");
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":S.apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify({
+        model:"claude-haiku-4-5-20251001",
+        max_tokens:2400,
+        system:"あなたは長期メモリの編集係。既存メモリ（複数項目）と会話ログを統合し、更新後のメモリを出力する。各項目の意味は見出し名から判断する（例：「灯について」ならアシスタント灯の人格・約束・確定事項、「わたしについて」ならユーザー本人の好み・状況・価値観）。出力は必ず既存と同じ見出しを、同じ順で、すべて使うこと：\n"+titles+"\nルール：日本語、箇条書き中心、各項目800文字以内。一時的な話題や挨拶は入れない。古くなった項目は書き換え、重複は統合。既存の有用な内容は勝手に削除しない。該当する新情報がない項目は既存の内容をそのまま出力。前置きや説明は一切書かない。",
+        messages:[{role:"user",content:"【既存メモリ】\n"+curMem+"\n\n【会話ログ】\n"+transcript+"\n\n更新後のメモリを指定の見出し形式で出力して。"}]
+      })
+    });
+    if(!res.ok){
+      let j=null; try{ j=await res.json(); }catch(e){}
+      throw new Error((j&&j.error&&j.error.message)||("HTTP "+res.status));
+    }
+    const data=await res.json();
+    const uu=data.usage||{};
+    addUsage("anthropic","haiku",(uu.input_tokens||0)+(uu.cache_creation_input_tokens||0),(uu.output_tokens||0));
+    const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+    const out={};
+    const parts=text.split(/===\s*(.+?)\s*===/);
+    for(let i=1;i<parts.length;i+=2){ out[parts[i]]=(parts[i+1]||"").trim(); }
+    let hit=false;
+    secs.forEach(sec=>{
+      if(out[sec.title]!==undefined){
+        const t=sheetEl.querySelector('[data-mtext="'+sec.id+'"]');
+        if(t){ t.value=out[sec.title]; hit=true;
+          const mc=sheetEl.querySelector('[data-mc="'+sec.id+'"]');
+          if(mc) mc.textContent=out[sec.title].length.toLocaleString();
+        }
+      }
+    });
+    if(!hit) throw new Error("応答の形式が読み取れなかった。もう一度試してみて。");
+  }catch(e){
+    alert("抽出に失敗："+e.message);
+  }finally{
+    btn.textContent="🌙 この会話から更新"; btn.disabled=false;
+  }
+}
+
 /* ============ knowledge ============ */
 function openKnowledge(){
   closeDrawer();
+  const p=presetOf(cur());
+  const ids=p.knowledgeIds||(p.knowledgeIds=[]);
   const items=S.knowledge.map(k=>`
     <div class="kItem" data-id="${k.id}">
       <div class="kName" data-act="edit">
         <div class="t">${esc(k.title)}</div>
         <div class="c">${k.text.length.toLocaleString()} 文字</div>
       </div>
-      <div class="toggle ${k.on?"on":""}" data-act="toggle"></div>
+      <div class="toggle ${ids.includes(k.id)?"on":""}" data-act="toggle"></div>
       <button class="edit" data-act="del">✕</button>
     </div>`).join("");
   openSheet(`
     <h3>ナレッジ</h3>
-    <div class="hint" style="margin-bottom:10px">ONのものだけがシステムプロンプトに注入されます。キャラOS・世界観・夜プロンプトなどを登録して、必要な時だけONに。長文をONにするほど1回あたりのコストが上がる点だけ注意。</div>
+    <div class="hint" style="margin-bottom:10px">ONのものが<b>今のプリセット「${esc(p.name)}」</b>で毎回読み込まれる。プリセットごとに別のセットを持てるよ（切り替えてからここを開けばそのプリセットの設定になる）。長文をONにするほど1回あたりのコストが上がる点だけ注意。</div>
     <div id="kList">${items || '<div class="hint">まだ何も登録されていません。</div>'}</div>
     <button id="kAdd">＋ 新しいナレッジを追加</button>
     <div class="rowBtns" style="margin-top:14px"><button id="kClose">閉じる</button></div>
@@ -531,9 +1321,17 @@ function openKnowledge(){
     const act=e.target.closest("[data-act]");
     if(!act) return;
     const k=S.knowledge.find(x=>x.id===id);
-    if(act.dataset.act==="toggle"){ k.on=!k.on; save(); openKnowledge(); }
+    if(act.dataset.act==="toggle"){
+      const i=ids.indexOf(id);
+      if(i>=0) ids.splice(i,1); else ids.push(id);
+      save(); openKnowledge();
+    }
     else if(act.dataset.act==="del"){
-      if(confirm(`「${k.title}」を削除する？`)){ S.knowledge=S.knowledge.filter(x=>x.id!==id); save(); openKnowledge(); }
+      if(confirm(`「${k.title}」を削除する？`)){
+        S.knowledge=S.knowledge.filter(x=>x.id!==id);
+        S.presets.forEach(pp=>{ pp.knowledgeIds=(pp.knowledgeIds||[]).filter(x=>x!==id); });
+        save(); openKnowledge();
+      }
     }
     else if(act.dataset.act==="edit"){ editKnowledge(id); }
   };
@@ -561,6 +1359,1168 @@ function editKnowledge(id){
   };
 }
 
+/* ============ presets ============ */
+function openPresets(){
+  closeDrawer();
+  const items=S.presets.map(p=>`
+    <div class="kItem" data-id="${p.id}">
+      <div class="kName" data-act="edit">
+        <div class="t">${esc(p.name)}</div>
+        <div class="c">${(p.systemPrompt||"").length.toLocaleString()} 文字のシスプロ ・ ナレッジ${(p.knowledgeIds||[]).length}件 ・ ${p.provider==="openai"?"GPT":(p.provider==="gemini"?"Gemini":(p.provider==="anthropic"?"Claude":"共通"))} ・ ${p.model?esc(p.model):"共通モデル"}</div>
+      </div>
+      <button class="edit" data-act="edit">✏️</button>
+    </div>`).join("");
+  openSheet(`
+    <h3>プリセット</h3>
+    <div class="hint" style="margin-bottom:10px">モードごとの専用の部屋。それぞれに<b>専用システムプロンプト・ナレッジセット・プロバイダ（Claude/GPT）・モデル</b>を持てる。切り替えはメニューのチップから、会話ごとに記録されるよ。</div>
+    <div id="pList">${items}</div>
+    <button id="pAdd" style="width:100%;margin-top:14px;padding:13px;border:1px dashed var(--line);border-radius:14px;color:var(--sub)">＋ 新しい部屋を追加</button>
+    <div class="rowBtns" style="margin-top:14px"><button id="pClose">閉じる</button></div>
+  `);
+  $("#pClose").onclick=closeSheet;
+  $("#pAdd").onclick=()=>{
+    const np={id:uid(),name:"🕯 新しい部屋",provider:"anthropic",systemPrompt:"",model:"",knowledgeIds:[]};
+    S.presets.push(np); save(); renderAll(); editPreset(np.id);
+  };
+  $("#pList").onclick=e=>{
+    const item=e.target.closest(".kItem"); if(!item) return;
+    editPreset(item.dataset.id);
+  };
+}
+function editPreset(id){
+  const p=S.presets.find(x=>x.id===id); if(!p) return;
+  const ids=(p.knowledgeIds||[]).slice();
+  const w={head:p.headerImage||"", icon:p.userIcon||"", headPos:p.headerPos||"50% 50%", iconPos:p.userIconPos||"50% 50%"};
+  const opts=['<option value="">共通設定と同じ</option>']
+    .concat(MODELS.map(([v,l])=>`<option value="${v}" ${p.model===v?"selected":""}>${l}</option>`)).join("");
+  const kItems=S.knowledge.map(k=>`
+    <div class="kItem" data-kid="${k.id}">
+      <div class="kName">
+        <div class="t">${esc(k.title)}</div>
+        <div class="c">${k.text.length.toLocaleString()} 文字</div>
+      </div>
+      <div class="toggle ${ids.includes(k.id)?"on":""}"></div>
+    </div>`).join("") || '<div class="hint">ナレッジが未登録。📁ナレッジから追加してね。</div>';
+  openSheet(`
+    <h3>プリセット編集</h3>
+    <div class="field"><label>名前</label>
+      <input type="text" id="pName" value="${escAttr(p.name)}"></div>
+    <div class="field"><label>プロバイダ</label>
+      <select id="pProv">
+        <option value="" ${!p.provider?"selected":""}>共通設定と同じ</option>
+        <option value="anthropic" ${p.provider==="anthropic"?"selected":""}>Claude（Anthropic）</option>
+        <option value="openai" ${p.provider==="openai"?"selected":""}>GPT（OpenAI）</option>
+        <option value="gemini" ${p.provider==="gemini"?"selected":""}>Gemini（Google）</option>
+      </select></div>
+    <div class="field" id="rowModelA" style="${p.provider==="anthropic"?"":"display:none"}"><label>モデル（Claude）</label><select id="pModel">${opts}</select></div>
+    <div class="field" id="rowModelO" style="${p.provider==="openai"?"":"display:none"}"><label>モデル（GPT）</label>
+      <input type="text" id="pModelO" value="${escAttr(p.provider==="openai"?(p.model||"gpt-5.6"):"gpt-5.6")}">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pChip" data-fill="pModelO" data-v="gpt-5.6" style="flex:none;padding:7px 12px;font-size:12px">gpt-5.6</button>
+        <button class="pChip" data-fill="pModelO" data-v="gpt-5.6-terra" style="flex:none;padding:7px 12px;font-size:12px">5.6-terra</button>
+        <button class="pChip" data-fill="pModelO" data-v="gpt-5.6-luna" style="flex:none;padding:7px 12px;font-size:12px">5.6-luna</button>
+        <button class="pChip" data-fill="pModelO" data-v="gpt-5.5" style="flex:none;padding:7px 12px;font-size:12px">gpt-5.5</button>
+        <button class="pChip" data-fill="pModelO" data-v="gpt-5.4" style="flex:none;padding:7px 12px;font-size:12px">gpt-5.4</button>
+        <button class="pChip" data-fill="pModelO" data-v="gpt-4o" style="flex:none;padding:7px 12px;font-size:12px">gpt-4o</button>
+      </div>
+      <div class="hint">チップをタップで入力、自由入力もOK。</div>
+      <div style="margin-top:10px"><label style="display:block;font-size:12px;color:var(--sub);margin-bottom:6px">思考レベル（GPT）</label>
+      <select id="pReason">
+        <option value="" ${!p.reasoning?"selected":""}>既定（medium・しっかり考える）</option>
+        <option value="none" ${p.reasoning==="none"?"selected":""}>none（考えない・最速＝Instant相当）</option>
+        <option value="low" ${p.reasoning==="low"?"selected":""}>low（軽く考える）</option>
+        <option value="high" ${p.reasoning==="high"?"selected":""}>high（じっくり考える）</option>
+        <option value="xhigh" ${p.reasoning==="xhigh"?"selected":""}>xhigh（最重要タスク向け）</option>
+      </select></div></div>
+    <div class="field" id="rowModelG" style="${p.provider==="gemini"?"":"display:none"}"><label>モデル（Gemini）</label>
+      <input type="text" id="pModelG" value="${escAttr(p.provider==="gemini"?(p.model||"gemini-2.5-flash"):"gemini-2.5-flash")}">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pChip" data-fill="pModelG" data-v="gemini-2.5-pro" style="flex:none;padding:7px 12px;font-size:12px">2.5-pro</button>
+        <button class="pChip" data-fill="pModelG" data-v="gemini-2.5-flash" style="flex:none;padding:7px 12px;font-size:12px">2.5-flash</button>
+      </div>
+      <div class="hint">チップをタップで入力、自由入力もOK。</div></div>
+    <div class="field"><label>最大出力の長さ（トークン）</label>
+      <input type="number" id="pMax" value="${p.maxTokens||""}" placeholder="空欄＝共通設定（${S.maxTokens}）" min="128" max="16384" step="64">
+      <div class="hint">目安：おしゃべり＝500〜1,000、執筆＝4,000〜8,000。1トークン≒日本語1〜1.5文字くらい。</div></div>
+    <div class="field"><label>専用システムプロンプト</label>
+      <textarea id="pSys" style="min-height:240px" placeholder="このモードの人格・ルール・鉄則をここに詳しく…">${esc(p.systemPrompt)}</textarea>
+      <div class="hint"><span id="pCount">${(p.systemPrompt||"").length.toLocaleString()}</span> 文字。ここは毎ターン必ず最初に読まれる。</div></div>
+    <div class="field"><label>このプリセットで読み込むナレッジ</label>
+      <div id="pkList">${kItems}</div></div>
+    <div class="field"><label>ヘッダー画像（部屋の飾り）</label>
+      <div id="pHeadPrev">${w.head?`<img src="${w.head}" style="width:100%;height:90px;object-fit:cover;border-radius:12px;border:1px solid var(--line)">`:'<div class="hint">未設定</div>'}</div>
+      <div class="rowBtns"><button id="pHeadPick">画像を選ぶ</button><button id="pHeadDel" class="danger">削除</button></div></div>
+    <div class="field"><label>わたしのアイコン</label>
+      <div id="pIconPrev">${w.icon?`<img src="${w.icon}" style="width:56px;height:56px;object-fit:cover;border-radius:50%;border:1px solid var(--line)">`:'<div class="hint">未設定</div>'}</div>
+      <div class="rowBtns"><button id="pIconPick">画像を選ぶ</button><button id="pIconDel" class="danger">削除</button></div></div>
+    <div class="rowBtns">
+      <button id="pSave" class="primary">保存</button>
+      <button id="pBack">戻る</button>
+    </div>
+    <div class="rowBtns" style="margin-top:10px"><button id="pDel" class="danger">この部屋を削除</button></div>
+    <input type="file" id="pHeadFile" accept="image/*" style="display:none">
+    <input type="file" id="pIconFile" accept="image/*" style="display:none">
+  `);
+  $("#pSys").addEventListener("input",()=>{ $("#pCount").textContent=$("#pSys").value.length.toLocaleString(); });
+  $("#pkList").onclick=e=>{
+    const item=e.target.closest(".kItem"); if(!item) return;
+    const kid=item.dataset.kid;
+    const i=ids.indexOf(kid);
+    if(i>=0) ids.splice(i,1); else ids.push(kid);
+    item.querySelector(".toggle").classList.toggle("on");
+  };
+  const buildPosPreview=(sel,key,posKey,isIcon)=>{
+    const box=$(sel); box.innerHTML="";
+    if(!w[key]){ box.innerHTML='<div class="hint">未設定</div>'; return; }
+    const img=document.createElement("img");
+    img.src=w[key];
+    img.style.cssText = isIcon
+      ? "width:80px;height:80px;object-fit:cover;border-radius:50%;border:1px solid var(--line);touch-action:none;display:block"
+      : "width:100%;height:96px;object-fit:cover;border-radius:12px;border:1px solid var(--line);touch-action:none;display:block";
+    img.style.objectPosition = w[posKey]||"50% 50%";
+    let drag=false,sx=0,sy=0,px=50,py=50;
+    img.onpointerdown=e=>{
+      drag=true; img.setPointerCapture(e.pointerId);
+      sx=e.clientX; sy=e.clientY;
+      const cur2=(w[posKey]||"50% 50%").split(" ").map(v=>parseFloat(v));
+      px=cur2[0]; py=cur2[1];
+      e.preventDefault();
+    };
+    img.onpointermove=e=>{
+      if(!drag) return;
+      const r=img.getBoundingClientRect();
+      let nx=px-(e.clientX-sx)/r.width*100;
+      let ny=py-(e.clientY-sy)/r.height*100;
+      nx=Math.max(0,Math.min(100,nx)); ny=Math.max(0,Math.min(100,ny));
+      w[posKey]=Math.round(nx)+"% "+Math.round(ny)+"%";
+      img.style.objectPosition=w[posKey];
+    };
+    img.onpointerup=img.onpointercancel=()=>{ drag=false; };
+    box.append(img);
+    const h=document.createElement("div"); h.className="hint";
+    h.textContent="画像をドラッグして、見せる位置を調整できるよ";
+    box.append(h);
+  };
+  const setHead=()=>buildPosPreview("#pHeadPrev","head","headPos",false);
+  const setIcon=()=>buildPosPreview("#pIconPrev","icon","iconPos",true);
+  setHead(); setIcon();
+  $("#pHeadPick").onclick=()=>$("#pHeadFile").click();
+  $("#pIconPick").onclick=()=>$("#pIconFile").click();
+  $("#pHeadDel").onclick=()=>{ w.head=""; setHead(); };
+  $("#pIconDel").onclick=()=>{ w.icon=""; setIcon(); };
+  $("#pHeadFile").onchange=async e=>{
+    const f=e.target.files[0]; e.target.value=""; if(!f) return;
+    try{ w.head=await fileToDataURL(f,900,0.72); setHead(); }
+    catch(err){ alert("画像の読み込みに失敗："+err.message); }
+  };
+  $("#pIconFile").onchange=async e=>{
+    const f=e.target.files[0]; e.target.value=""; if(!f) return;
+    try{ w.icon=await fileToDataURL(f,256,0.8); setIcon(); }
+    catch(err){ alert("画像の読み込みに失敗："+err.message); }
+  };
+  $("#pProv").onchange=()=>{
+    const v=$("#pProv").value;
+    $("#rowModelA").style.display=(v==="anthropic")?"":"none";
+    $("#rowModelO").style.display=(v==="openai")?"":"none";
+    $("#rowModelG").style.display=(v==="gemini")?"":"none";
+  };
+  sheetEl.querySelectorAll("[data-fill]").forEach(b=>{
+    b.onclick=()=>{ const t=$("#"+b.dataset.fill); if(t) t.value=b.dataset.v; };
+  });
+  $("#pDel").onclick=()=>{
+    if(S.presets.length<=1){ alert("最後の1部屋は消せないよ。"); return; }
+    if(!confirm(`「${p.name}」を削除する？（会話は消えず、先頭の部屋に引っ越すよ）`)) return;
+    S.presets=S.presets.filter(x=>x.id!==p.id);
+    S.convos.forEach(cc=>{ if(cc.presetId===p.id) cc.presetId=S.presets[0].id; });
+    if(S.currentPreset===p.id) S.currentPreset=S.presets[0].id;
+    save(); renderAll(); openPresets();
+  };
+  $("#pBack").onclick=openPresets;
+  $("#pSave").onclick=()=>{
+    p.name=$("#pName").value.trim()||p.name;
+    p.provider=$("#pProv").value;
+    if(p.provider==="openai") p.model=$("#pModelO").value.trim()||"gpt-5.6";
+    else if(p.provider==="gemini") p.model=$("#pModelG").value.trim()||"gemini-2.5-flash";
+    else if(p.provider==="anthropic") p.model=$("#pModel").value;
+    else p.model="";
+    p.reasoning=$("#pReason")?$("#pReason").value:"";
+    p.maxTokens=Number($("#pMax").value)||"";
+    p.systemPrompt=$("#pSys").value;
+    p.knowledgeIds=ids.slice();
+    p.headerImage=w.head;
+    p.headerPos=w.headPos;
+    p.userIcon=w.icon;
+    p.userIconPos=w.iconPos;
+    save(); renderAll(); openPresets();
+  };
+}
+
+/* ============ image generation (Gemini / GPT, with reference images) ============ */
+let lastGenDataUrl="", genRefs=[], genCharSel=[];
+function b64ToBlob(b64,mime){
+  const bin=atob(b64);
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+function renderGenRefs(){
+  const box=$("#gRefs"); if(!box) return;
+  box.innerHTML="";
+  genRefs.forEach((r,i)=>{
+    const d=document.createElement("div"); d.className="attachThumb";
+    const img=document.createElement("img");
+    img.src="data:"+r.media_type+";base64,"+r.data;
+    const x=document.createElement("button"); x.textContent="✕";
+    x.onclick=()=>{ genRefs.splice(i,1); renderGenRefs(); };
+    d.append(img,x); box.append(d);
+  });
+}
+function openImageGen(){
+  closeDrawer();
+  genRefs=[];
+  openSheet(`
+    <h3>画像生成</h3>
+    <div class="field"><label>生成エンジン</label>
+      <select id="gProv">
+        <option value="gemini" ${S.imageProvider!=="openai"?"selected":""}>Gemini（${esc(S.geminiImageModel||"gemini-2.5-flash-image")}）</option>
+        <option value="openai" ${S.imageProvider==="openai"?"selected":""}>GPT（${esc(S.openaiImageModel||"gpt-image-2")}）</option>
+      </select></div>
+    <div class="field" id="gQRow" style="${S.imageProvider==="openai"?"":"display:none"}"><label>画質（GPT）</label>
+      <select id="gQ">
+        <option value="low">低（1枚 約1円）</option>
+        <option value="medium" selected>中（1枚 約8円）</option>
+        <option value="high">高（1枚 約32円）</option>
+      </select></div>
+    <div class="field"><label>キャラ参照ライブラリ</label>
+      <div id="gChars" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div class="rowBtns" style="margin-top:8px"><button id="gCharManage">📚 登録・編集</button></div>
+      <div class="hint">登録キャラはチップでON/OFF。インライン🎨（チャット内生成）では、指示文に名前が入ってると自動で参照されるよ。</div></div>
+    <div class="field"><label>参照画像（任意・最大3枚）</label>
+      <div id="gRefs" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="rowBtns" style="margin-top:8px"><button id="gRefAdd">＋ 参照画像を追加</button></div>
+      <div class="hint">キャラの見た目・構図・画風を参照させたい画像。「この子をヘッダー用の構図で」みたいな指示ができるよ。</div></div>
+    <div class="field"><label>プロンプト</label>
+      <textarea id="gPrompt" style="min-height:120px" placeholder="作りたい画像を日本語でOK。参照画像がある時は「この画像の雰囲気で〜」など"></textarea></div>
+    <div class="rowBtns" style="margin-bottom:12px"><button id="gGo" class="primary">🎨 生成する</button></div>
+    <div id="gResult"></div>
+    <div class="rowBtns" style="margin-top:12px"><button id="gClose">閉じる</button></div>
+    <input type="file" id="gRefFile" accept="image/*" multiple style="display:none">
+  `);
+  $("#gProv").onchange=()=>{
+    S.imageProvider=$("#gProv").value; save();
+    $("#gQRow").style.display=(S.imageProvider==="openai")?"":"none";
+  };
+  $("#gRefAdd").onclick=()=>$("#gRefFile").click();
+  $("#gRefFile").onchange=async e=>{
+    const files=Array.from(e.target.files).slice(0, 3-genRefs.length);
+    for(const f of files){
+      try{ genRefs.push(await fileToImage(f)); }
+      catch(err){ alert("画像の読み込みに失敗："+err.message); }
+    }
+    e.target.value="";
+    renderGenRefs();
+  };
+  renderGenChars();
+  $("#gCharManage").onclick=openCharRefs;
+  $("#gClose").onclick=closeSheet;
+  $("#gGo").onclick=genImage;
+}
+function renderGenChars(){
+  const box=$("#gChars"); if(!box) return;
+  box.innerHTML="";
+  if(!(S.charRefs||[]).length){
+    box.innerHTML='<div class="hint">まだ登録なし。「📚登録・編集」から蓮や奏音の確定ビジュアルを登録してね。</div>';
+    return;
+  }
+  S.charRefs.forEach(cr=>{
+    const b=document.createElement("button");
+    b.className="pChip"+(genCharSel.indexOf(cr.id)>=0?" cur":"");
+    b.style.cssText="flex:none;padding:8px 14px";
+    b.textContent=cr.name;
+    b.onclick=()=>{
+      const i=genCharSel.indexOf(cr.id);
+      if(i>=0) genCharSel.splice(i,1); else genCharSel.push(cr.id);
+      renderGenChars();
+    };
+    box.append(b);
+  });
+}
+function selectedCharImages(){
+  const out=[];
+  (S.charRefs||[]).forEach(cr=>{
+    if(genCharSel.indexOf(cr.id)>=0) (cr.images||[]).forEach(im=>out.push(im));
+  });
+  return out;
+}
+function openCharRefs(){
+  const items=(S.charRefs||[]).map(cr=>{
+    const th=cr.images&&cr.images[0]?`<img src="data:${cr.images[0].media_type};base64,${cr.images[0].data}" style="width:44px;height:44px;object-fit:cover;border-radius:10px;border:1px solid var(--line);margin-right:6px;flex:none">`:"";
+    return `<div class="kItem" data-cid="${cr.id}">
+      ${th}
+      <div class="kName" data-act="edit"><div class="t">${esc(cr.name)}</div><div class="c">${(cr.images||[]).length}枚</div></div>
+      <button class="edit" data-act="del">✕</button>
+    </div>`;
+  }).join("") || '<div class="hint">まだ登録がないよ。</div>';
+  openSheet(`
+    <h3>キャラ参照ライブラリ</h3>
+    <div class="hint" style="margin-bottom:10px">蓮・遙・奏音などの確定ビジュアルを登録しておく場所。1キャラ2枚まで（正面＋雰囲気、とか）。画像は端末に保存されるから、登録しすぎには注意。バックアップにも含まれるよ。</div>
+    <div id="crList">${items}</div>
+    <button id="crAdd" style="width:100%;margin-top:14px;padding:13px;border:1px dashed var(--line);border-radius:14px;color:var(--sub)">＋ キャラを登録</button>
+    <div class="rowBtns" style="margin-top:14px"><button id="crBack">🎨に戻る</button></div>
+  `);
+  $("#crBack").onclick=openImageGen;
+  $("#crAdd").onclick=()=>editCharRef(null);
+  $("#crList").onclick=e=>{
+    const item=e.target.closest(".kItem"); if(!item) return;
+    const cr=S.charRefs.find(x=>x.id===item.dataset.cid); if(!cr) return;
+    const act=e.target.closest("[data-act]"); if(!act) return;
+    if(act.dataset.act==="del"){
+      if(confirm(`「${cr.name}」を削除する？`)){
+        S.charRefs=S.charRefs.filter(x=>x.id!==cr.id);
+        genCharSel=genCharSel.filter(x=>x!==cr.id);
+        save(); openCharRefs();
+      }
+    }else if(act.dataset.act==="edit"){ editCharRef(cr.id); }
+  };
+}
+function editCharRef(id){
+  const cr = id ? S.charRefs.find(x=>x.id===id) : {id:null,name:"",images:[]};
+  const work={name:cr.name,images:(cr.images||[]).slice()};
+  openSheet(`
+    <h3>${id?"キャラを編集":"キャラを登録"}</h3>
+    <div class="field"><label>名前（🎨指示文の自動マッチに使う）</label>
+      <input type="text" id="crName" value="${escAttr(work.name)}" placeholder="例：蓮"></div>
+    <div class="field"><label>参照画像（最大2枚）</label>
+      <div id="crImgs" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="rowBtns" style="margin-top:8px"><button id="crPick">＋ 画像を選ぶ</button></div></div>
+    <div class="rowBtns"><button id="crSave" class="primary">保存</button><button id="crBack2">戻る</button></div>
+    <input type="file" id="crFile" accept="image/*" multiple style="display:none">
+  `);
+  const renderImgs=()=>{
+    const box=$("#crImgs"); box.innerHTML="";
+    work.images.forEach((im,i)=>{
+      const d=document.createElement("div"); d.className="attachThumb";
+      const img=document.createElement("img");
+      img.src="data:"+im.media_type+";base64,"+im.data;
+      const x=document.createElement("button"); x.textContent="✕";
+      x.onclick=()=>{ work.images.splice(i,1); renderImgs(); };
+      d.append(img,x); box.append(d);
+    });
+  };
+  renderImgs();
+  $("#crPick").onclick=()=>$("#crFile").click();
+  $("#crFile").onchange=async e=>{
+    const files=Array.from(e.target.files).slice(0, 2-work.images.length);
+    for(const f of files){
+      try{ work.images.push(await fileToImage(f,768,0.7)); }
+      catch(err){ alert("画像の読み込みに失敗："+err.message); }
+    }
+    e.target.value="";
+    renderImgs();
+  };
+  $("#crBack2").onclick=openCharRefs;
+  $("#crSave").onclick=()=>{
+    const name=$("#crName").value.trim();
+    if(!name){ alert("名前を入れてね（自動マッチに使うから）"); return; }
+    if(!work.images.length){ alert("画像を1枚は選んでね"); return; }
+    if(id){ cr.name=name; cr.images=work.images; }
+    else S.charRefs.push({id:uid(),name:name,images:work.images});
+    save(); openCharRefs();
+  };
+}
+async function generateImageCore(prompt, refs, qVal, signal){
+  const prov=S.imageProvider||"gemini";
+  if(prov==="openai" && !S.openaiKey) throw new Error("OpenAIのAPIキーを⚙設定に入力してね。");
+  if(prov!=="openai" && !S.geminiKey) throw new Error("GeminiのAPIキーを⚙設定に入力してね。");
+  if(prov==="openai"){
+    let res;
+    if(refs && refs.length){
+      const fd=new FormData();
+      fd.append("model",S.openaiImageModel||"gpt-image-2");
+      fd.append("prompt",prompt);
+      fd.append("quality",qVal||"medium");
+      fd.append("size","1024x1024");
+      refs.forEach((r,i)=>{ fd.append("image[]", b64ToBlob(r.data,r.media_type), "ref"+i+".jpg"); });
+      res=await fetch("https://api.openai.com/v1/images/edits",{
+        method:"POST", signal:signal,
+        headers:{"authorization":"Bearer "+S.openaiKey},
+        body:fd
+      });
+    }else{
+      res=await fetch("https://api.openai.com/v1/images/generations",{
+        method:"POST", signal:signal,
+        headers:{"content-type":"application/json","authorization":"Bearer "+S.openaiKey},
+        body:JSON.stringify({
+          model:S.openaiImageModel||"gpt-image-2",
+          prompt:prompt,
+          quality:qVal||"medium",
+          size:"1024x1024"
+        })
+      });
+    }
+    if(!res.ok){
+      let j=null; try{ j=await res.json(); }catch(e){}
+      throw new Error((j&&j.error&&j.error.message)||("HTTP "+res.status));
+    }
+    const data=await res.json();
+    const b64=(((data.data||[])[0])||{}).b64_json;
+    if(!b64) throw new Error("画像が返らなかった。⚙設定のGPT画像モデル名を確認してみて。");
+    addImgCost("openai",qVal||"medium");
+    return "data:image/png;base64,"+b64;
+  }else{
+    const model=S.geminiImageModel||"gemini-2.5-flash-image";
+    const parts=(refs||[]).map(r=>({inlineData:{mimeType:r.media_type,data:r.data}}));
+    parts.push({text:prompt});
+    const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
+      method:"POST", signal:signal,
+      headers:{"content-type":"application/json","x-goog-api-key":S.geminiKey},
+      body:JSON.stringify({contents:[{parts:parts}]})
+    });
+    if(!res.ok){
+      let j=null; try{ j=await res.json(); }catch(e){}
+      throw new Error((j&&j.error&&j.error.message)||("HTTP "+res.status));
+    }
+    const data=await res.json();
+    const rparts=(((data.candidates||[])[0]||{}).content||{}).parts||[];
+    const imgPart=rparts.find(p=>(p.inlineData&&p.inlineData.data)||(p.inline_data&&p.inline_data.data));
+    if(!imgPart){
+      const txt=rparts.filter(p=>p.text).map(p=>p.text).join(" ");
+      throw new Error(txt?("画像が返らなかった："+txt.slice(0,200)):"画像が返らなかった。⚙設定のモデル名を確認してみて。");
+    }
+    const d=imgPart.inlineData||imgPart.inline_data;
+    const mime=d.mimeType||d.mime_type||"image/png";
+    addImgCost("gemini","");
+    return "data:"+mime+";base64,"+d.data;
+  }
+}
+async function genImage(){
+  const prompt=$("#gPrompt").value.trim();
+  if(!prompt) return;
+  const btn=$("#gGo"); btn.disabled=true; btn.textContent="生成中…（10〜60秒）";
+  $("#gResult").innerHTML="";
+  try{
+    lastGenDataUrl=await generateImageCore(prompt, genRefs.concat(selectedCharImages()).slice(0,4), ($("#gQ")?$("#gQ").value:"medium"), null);
+    $("#gResult").innerHTML=`
+      <img src="${lastGenDataUrl}" style="width:100%;border-radius:14px;border:1px solid var(--line)">
+      <div class="hint">画像を長押し→「"写真"に保存」で端末に保存できるよ（アプリアイコンにしたい時はこれ）。</div>
+      <div class="rowBtns" style="margin-top:10px">
+        <button id="gSetHead">この部屋のヘッダーに</button>
+        <button id="gSetIcon">わたしのアイコンに</button>
+      </div>`;
+    $("#gSetHead").onclick=async()=>{
+      const p=presetOf(cur());
+      p.headerImage=await dataURLResize(lastGenDataUrl,900,0.72);
+      p.headerPos="50% 50%";
+      save(); renderAll();
+      $("#gSetHead").textContent="✓ 設定した";
+    };
+    $("#gSetIcon").onclick=async()=>{
+      const p=presetOf(cur());
+      p.userIcon=await dataURLResize(lastGenDataUrl,256,0.8);
+      p.userIconPos="50% 50%";
+      save(); renderAll();
+      $("#gSetIcon").textContent="✓ 設定した";
+    };
+  }catch(e){
+    $("#gResult").innerHTML='<div class="hint" style="color:var(--danger)">生成に失敗：'+esc(e.message)+'</div>';
+  }finally{
+    btn.disabled=false; btn.textContent="🎨 生成する";
+  }
+}
+async function buildImagePrompt(ctx, req, signal){
+  if(!S.apiKey) return req;
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST", signal:signal,
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":S.apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify({
+        model:"claude-haiku-4-5-20251001",
+        max_tokens:400,
+        system:"あなたは画像生成プロンプトの作成係。与えられた会話の文脈と指示から、その場面を描くための画像生成プロンプトを1つだけ出力する。登場人物の外見・服装・雰囲気、場所、構図、光、画風を具体的に。会話に出てきた描写を忠実に拾う。前置きや説明なし、プロンプト本文のみを出力。",
+        messages:[{role:"user",content:"【会話の文脈】\n"+ctx+"\n\n【指示】"+req+"\n\n画像生成プロンプトだけを出力して。"}]
+      })
+    });
+    if(!res.ok) return req;
+    const data=await res.json();
+    const uu=data.usage||{};
+    addUsage("anthropic","haiku",(uu.input_tokens||0),(uu.output_tokens||0));
+    const t=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+    return t||req;
+  }catch(e){ return req; }
+}
+async function inlineImageGen(req){
+  let c=cur();
+  if(!c){ c={id:uid(),title:"新しい会話",messages:[],updated:Date.now(),presetId:S.currentPreset}; S.convos.unshift(c); S.currentId=c.id; }
+  c.messages.push({role:"user",content:"🎨 "+req});
+  c.updated=Date.now(); save();
+  taEl.value=""; taEl.style.height="auto";
+  renderChat(); renderTitle(); renderDrawer();
+  streaming=true; setStreamUI(true);
+  aborter=new AbortController();
+  const ph=msgEl({role:"assistant",content:"🎨 文脈を読んでる…"},-1);
+  chatEl.append(ph); scrollBottom();
+  const phBody=ph.querySelector(".body");
+  try{
+    let ctx="";
+    const msgs=c.messages.filter(m=>!m.hidden);
+    for(let i=msgs.length-2;i>=0;i--){
+      const line=(msgs[i].role==="user"?"ユーザー：":"アシスタント：")+(msgs[i].content||"（画像）")+"\n\n";
+      if(ctx.length+line.length>6000) break;
+      ctx=line+ctx;
+    }
+    const prompt=await buildImagePrompt(ctx, req, aborter.signal);
+    const hay=req+" "+prompt;
+    const matched=(S.charRefs||[]).filter(cr=>cr.name && hay.indexOf(cr.name)>=0);
+    let refs=[];
+    matched.forEach(cr=>(cr.images||[]).forEach(im=>refs.push(im)));
+    refs=refs.slice(0,4);
+    phBody.textContent="🎨 生成中…（"+((S.imageProvider||"gemini")==="openai"?"GPT":"Gemini")
+      +(matched.length?("・参照："+matched.map(cr=>cr.name).join("・")):"")+"・10〜60秒）";
+    scrollBottom();
+    const dataUrl=await generateImageCore(prompt, refs, "medium", aborter.signal);
+    const small=await dataURLResize(dataUrl, 720, 0.72);
+    const b64=small.split(",")[1];
+    c.messages.push({
+      role:"assistant",
+      content:"🎨「"+req.slice(0,40)+(req.length>40?"…":"")+"」の画像だよ。長押しで写真に保存できる。",
+      images:[{media_type:"image/jpeg",data:b64}]
+    });
+    c.updated=Date.now(); save();
+    renderChat();
+  }catch(e){
+    ph.remove();
+    if(e.name!=="AbortError") showError("画像生成に失敗："+e.message);
+    renderChat();
+  }finally{
+    streaming=false; setStreamUI(false); aborter=null;
+    updateCostHint();
+  }
+}
+function dataURLResize(dataUrl,maxDim,quality){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(Math.max(w,h)>maxDim){ const k=maxDim/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+      const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+      cv.getContext("2d").drawImage(img,0,0,w,h);
+      resolve(cv.toDataURL("image/jpeg",quality));
+    };
+    img.onerror=()=>reject(new Error("画像処理に失敗"));
+    img.src=dataUrl;
+  });
+}
+
+/* ============ morning mode ============ */
+function todayStr(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function checkMorning(){
+  const m=S.morning||{};
+  if(!m.on) return;
+  if(S.morningDone===todayStr()) return;
+  const h=new Date().getHours();
+  const s=(m.startHour!=null)?m.startHour:10, e=(m.endHour!=null)?m.endHour:15;
+  if(h<s||h>e) return;
+  openMorning();
+}
+function openMorning(){
+  const chips=S.presets.map(p=>`<button class="pChip" data-mpid="${p.id}" style="flex:none;padding:10px 16px">${esc(p.name)}</button>`).join("");
+  openSheet(`
+    <h3>おはよう</h3>
+    <div class="hint" style="margin-bottom:12px">おはようチャットを始める？ 今日の部屋を選んでね🌙</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${chips}</div>
+    <div class="rowBtns"><button id="mornSkip">今日はいらない</button></div>
+  `);
+  sheetEl.querySelectorAll("[data-mpid]").forEach(b=>{
+    b.onclick=()=>{
+      S.morningDone=todayStr();
+      S.currentPreset=b.dataset.mpid;
+      const c={id:uid(),title:"おはよう "+todayStr().slice(5),messages:[],updated:Date.now(),presetId:b.dataset.mpid};
+      c.messages.push({role:"user",hidden:true,content:"（システム：かのんが今日はじめてアプリを開いたよ。おはようの挨拶を、定型文ではなく、今日のあなた自身の言葉で送って。長さは自然に、1〜4文くらい。）"});
+      S.convos.unshift(c); S.currentId=c.id;
+      save(); closeSheet(); renderAll(); callAPI();
+    };
+  });
+  $("#mornSkip").onclick=()=>{ S.morningDone=todayStr(); save(); closeSheet(); };
+}
+
+/* ============ usage tracking ============ */
+function usageDay(){
+  const d=todayStr();
+  if(!S.usage) S.usage={};
+  if(!S.usage[d]) S.usage[d]={};
+  return S.usage[d];
+}
+function estCost(prov,model,inTok,outTok){
+  const m=(model||"").toLowerCase();
+  let rIn=3,rOut=15;
+  if(prov==="anthropic"){
+    if(m.indexOf("opus")>=0||m.indexOf("fable")>=0){rIn=5;rOut=25;}
+    else if(m.indexOf("haiku")>=0){rIn=1;rOut=5;}
+    else{rIn=3;rOut=15;}
+  }else if(prov==="openai"){
+    if(m.indexOf("luna")>=0){rIn=1;rOut=6;}
+    else if(m.indexOf("terra")>=0){rIn=2.5;rOut=15;}
+    else if(m.indexOf("5.6")>=0||m.indexOf("5.5")>=0){rIn=5;rOut=30;}
+    else if(m.indexOf("5.4")>=0){rIn=2.5;rOut=15;}
+    else if(m.indexOf("4o")>=0){rIn=2.5;rOut=10;}
+    else{rIn=2.5;rOut=15;}
+  }else{
+    if(m.indexOf("pro")>=0){rIn=1.25;rOut=10;}
+    else{rIn=0.3;rOut=2.5;}
+  }
+  return (inTok*rIn+outTok*rOut)/1e6;
+}
+function addUsage(prov,model,inTok,outTok){
+  const d=usageDay();
+  d[prov+"_in"]=(d[prov+"_in"]||0)+Math.round(inTok||0);
+  d[prov+"_out"]=(d[prov+"_out"]||0)+Math.round(outTok||0);
+  d.cost=(d.cost||0)+estCost(prov,model,inTok||0,outTok||0);
+  save();
+}
+function addImgCost(prov,quality){
+  const d=usageDay();
+  const key="img_"+prov+(prov==="openai"?("_"+quality):"");
+  d[key]=(d[key]||0)+1;
+  const c = prov==="openai" ? ({low:0.006,medium:0.053,high:0.211}[quality]||0.053) : 0.039;
+  d.cost=(d.cost||0)+c;
+  save();
+}
+function openUsage(){
+  closeDrawer();
+  const days=S.usage||{};
+  const t=todayStr(), month=t.slice(0,7);
+  const agg=keys=>{
+    const o={};
+    keys.forEach(k=>{
+      const d=days[k]||{};
+      Object.keys(d).forEach(key=>{ o[key]=(o[key]||0)+d[key]; });
+    });
+    return o;
+  };
+  const fmt=o=>{
+    const rows=[];
+    const line=(label,i,ot)=>{ if(i||ot) rows.push(label+"：入力 "+Math.round(i||0).toLocaleString()+" ／ 出力 "+Math.round(ot||0).toLocaleString()+" tok"); };
+    line("Claude",o.anthropic_in,o.anthropic_out);
+    line("GPT",o.openai_in,o.openai_out);
+    line("Gemini",o.gemini_in,o.gemini_out);
+    const imgs=(o.img_gemini||0)+(o.img_openai_low||0)+(o.img_openai_medium||0)+(o.img_openai_high||0);
+    if(imgs) rows.push("画像生成："+imgs+" 枚");
+    if(o.tts_chars) rows.push("読み上げ："+Math.round(o.tts_chars).toLocaleString()+" 文字");
+    if(!rows.length) rows.push("まだ記録がないよ");
+    const usd=o.cost||0;
+    rows.push("概算コスト：約 "+Math.round(usd*155).toLocaleString()+" 円（$"+usd.toFixed(3)+"）");
+    return rows.map(r=>'<div class="hint" style="margin-top:5px">'+esc(r)+'</div>').join("");
+  };
+  const monthKeys=Object.keys(days).filter(k=>k.indexOf(month)===0);
+  const stMB=(JSON.stringify(S).length*2/1048576);
+  const stPct=Math.min(100,Math.round(stMB/5*100));
+  const stColor=stMB>4?"var(--danger)":(stMB>3?"#C8B27E":"var(--sub)");
+  const storageHtml=`
+    <div class="field"><label>端末ストレージ（画像・会話・設定の合計）</label>
+      <div style="height:10px;border-radius:5px;background:var(--bg);border:1px solid var(--line);overflow:hidden">
+        <div style="height:100%;width:${stPct}%;background:${stColor}"></div>
+      </div>
+      <div class="hint" style="color:${stColor}">約 ${stMB.toFixed(2)} MB ／ 上限の目安 5 MB${stMB>4?"　⚠️そろそろ整理を（古い会話の削除・画像の見直し）":""}</div>
+    </div>`;
+  openSheet(`
+    <h3>使用量</h3>
+    <div class="field"><label>今日（${t.slice(5)}）</label>${fmt(agg([t]))}</div>
+    <div class="field"><label>今月（${month.slice(5)}月）</label>${fmt(agg(monthKeys))}</div>
+    ${storageHtml}
+    <div class="hint" style="margin-bottom:12px">※コストはアプリ側の概算（1ドル155円換算・料金表は目安）。正確な請求額は各社のダッシュボードで確認してね。<br><br>💡 <b>Geminiの無料枠について</b>：課金を有効にしていないGeminiキーは自動的に無料枠で動く。上限に達するとエラーで止まるだけで、<b>勝手に課金されることはない</b>よ。だから無料のまま使いたければ、Google Cloudで課金を有効にしないこと。ここの概算に金額が出ても、無料枠内なら実際の請求は0円。上限エラーが出たら「今日の無料分おしまい」の合図。</div>
+    <div class="rowBtns">
+      <button id="uReset" class="danger">記録をリセット</button>
+      <button id="uClose">閉じる</button>
+    </div>
+  `);
+  $("#uClose").onclick=closeSheet;
+  $("#uReset").onclick=()=>{
+    if(!confirm("使用量の記録をぜんぶ消す？（実際の請求には影響しないよ）")) return;
+    S.usage={}; save(); openUsage();
+  };
+}
+
+/* ============ favorites & cards ============ */
+function openFavs(){
+  closeDrawer();
+  const favs=S.favorites||[];
+  const items=favs.slice().reverse().map(f=>`
+    <div style="border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px">
+      <div style="font-family:var(--serif);line-height:1.9;white-space:pre-wrap;word-break:break-word">${esc(f.text.length>140?f.text.slice(0,140)+"…":f.text)}</div>
+      <div class="hint" style="margin-top:8px">— ${esc(f.who)}　${esc(f.date)}${f.convo?("　『"+esc(f.convo)+"』"):""}</div>
+      <div class="rowBtns" style="margin-top:10px">
+        <button data-fspeak="${f.id}">🔊 読んで</button>
+        <button data-fcard="${f.id}">🖼 カード画像に</button>
+        <button data-fdel="${f.id}" class="danger">削除</button>
+      </div>
+    </div>`).join("") || '<div class="hint">まだお気に入りがないよ。メッセージの「🩷」を押すとここに集まる。</div>';
+  openSheet(`
+    <h3>お気に入り</h3>
+    <div id="favCard"></div>
+    <div id="favList">${items}</div>
+    <div class="rowBtns" style="margin-top:12px"><button id="favClose">閉じる</button></div>
+  `);
+  $("#favClose").onclick=closeSheet;
+  sheetEl.querySelectorAll("[data-fspeak]").forEach(b=>{
+    b.onclick=()=>{
+      const f=S.favorites.find(x=>x.id===b.dataset.fspeak); if(!f) return;
+      speakText(f.text, b);
+    };
+  });
+  sheetEl.querySelectorAll("[data-fdel]").forEach(b=>{
+    b.onclick=()=>{
+      if(!confirm("このお気に入りを削除する？")) return;
+      S.favorites=S.favorites.filter(x=>x.id!==b.dataset.fdel);
+      save(); openFavs();
+    };
+  });
+  sheetEl.querySelectorAll("[data-fcard]").forEach(b=>{
+    b.onclick=()=>{
+      const f=S.favorites.find(x=>x.id===b.dataset.fcard); if(!f) return;
+      const url=favCardDataURL(f);
+      $("#favCard").innerHTML=`
+        <img src="${url}" style="width:100%;border-radius:16px;border:1px solid var(--line);margin-bottom:8px">
+        <div class="hint" style="margin-bottom:14px">カードを長押し→「"写真"に保存」で端末に保存できるよ🩷</div>`;
+      sheetEl.scrollTop=0;
+    };
+  });
+}
+function wrapCanvasText(ctx,text,maxW){
+  const lines=[];
+  text.split("\n").forEach(para=>{
+    let line="";
+    for(const ch of para){
+      if(line && ctx.measureText(line+ch).width>maxW){ lines.push(line); line=ch; }
+      else line+=ch;
+    }
+    lines.push(line);
+  });
+  return lines;
+}
+function favCardDataURL(f){
+  const W=1080;
+  let text=f.text;
+  if(text.length>360) text=text.slice(0,360)+"…";
+  let fs=46;
+  const mctx=document.createElement("canvas").getContext("2d");
+  mctx.font=fs+'px "Hiragino Mincho ProN","Yu Mincho",serif';
+  let lines=wrapCanvasText(mctx,text,W-220);
+  if(lines.length>13){
+    fs=36;
+    mctx.font=fs+'px "Hiragino Mincho ProN","Yu Mincho",serif';
+    lines=wrapCanvasText(mctx,text,W-220);
+  }
+  const lh=Math.round(fs*1.9);
+  const H=Math.max(1080, 400+lines.length*lh+280);
+  const cv=document.createElement("canvas");
+  cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d");
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#0A0D15"); g.addColorStop(1,"#1B2340");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  for(let i=0;i<26;i++){
+    const x=40+Math.random()*(W-80), y=40+Math.random()*(H-80);
+    ctx.fillStyle="rgba(229,233,242,"+(0.15+Math.random()*0.35)+")";
+    const s=Math.random()<0.7?2:3;
+    ctx.fillRect(x,y,s,s);
+  }
+  const mc=document.createElement("canvas"); mc.width=220; mc.height=220;
+  const mcx=mc.getContext("2d");
+  mcx.fillStyle="#E9DFC4";
+  mcx.beginPath(); mcx.arc(110,110,64,0,Math.PI*2); mcx.fill();
+  mcx.globalCompositeOperation="destination-out";
+  mcx.beginPath(); mcx.arc(140,98,60,0,Math.PI*2); mcx.fill();
+  ctx.drawImage(mc, W/2-110, 80);
+  ctx.fillStyle="#E5E9F2";
+  ctx.font=fs+'px "Hiragino Mincho ProN","Yu Mincho",serif';
+  ctx.textAlign="center";
+  let y=430;
+  lines.forEach(l=>{ ctx.fillText(l, W/2, y); y+=lh; });
+  ctx.fillStyle="#C8B27E";
+  ctx.font='31px "Hiragino Mincho ProN","Yu Mincho",serif';
+  ctx.fillText("— "+f.who+"　"+f.date, W/2, y+64);
+  ctx.fillStyle="rgba(135,146,168,.9)";
+  ctx.font='24px "Hiragino Mincho ProN",serif';
+  ctx.fillText("L U C E   S I L E N T E", W/2, H-72);
+  return cv.toDataURL("image/png");
+}
+
+/* ============ message edit / delete ============ */
+function editMessage(idx){
+  const c=cur(); if(!c) return;
+  const m=c.messages[idx]; if(!m) return;
+  openSheet(`
+    <h3>発言を編集</h3>
+    <div class="field"><textarea id="emText" style="min-height:180px">${esc(m.content)}</textarea></div>
+    <div class="rowBtns" style="margin-bottom:10px"><button id="emResend" class="primary">保存して再送（以降の履歴は削除）</button></div>
+    <div class="rowBtns"><button id="emSave">保存のみ</button><button id="emClose">戻る</button></div>
+  `);
+  $("#emClose").onclick=closeSheet;
+  $("#emSave").onclick=()=>{ m.content=$("#emText").value; save(); closeSheet(); renderChat(); };
+  $("#emResend").onclick=()=>{
+    if(!confirm("この発言より後の履歴を削除して、書き直した内容で再送する？")) return;
+    m.content=$("#emText").value;
+    c.messages=c.messages.slice(0,idx+1);
+    save(); closeSheet(); renderChat(); callAPI();
+  };
+}
+function deleteMessage(idx){
+  const c=cur(); if(!c) return;
+  if(!confirm("このメッセージを削除する？（人格がブレた返信の削除は履歴の防波堤になるよ）")) return;
+  c.messages.splice(idx,1);
+  save(); renderChat();
+}
+
+/* ============ snippets ============ */
+function openSnips(){
+  const items=(S.snippets||[]).map(s2=>`
+    <div class="kItem" data-sid="${s2.id}">
+      <div class="kName" data-act="use">
+        <div class="t">${esc(s2.title)}</div>
+        <div class="c">${esc(s2.text.slice(0,34))}${s2.text.length>34?"…":""}</div>
+      </div>
+      <button class="edit" data-act="edit">✏️</button>
+      <button class="edit" data-act="del">✕</button>
+    </div>`).join("") || '<div class="hint">まだ登録がないよ。💫🌙💞の合図や「夜プロンプトを読み直してから」みたいな定型指示を入れておくと、ワンタップで入力欄に挿入できる。</div>';
+  openSheet(`
+    <h3>スニペット</h3>
+    <div id="snList">${items}</div>
+    <button id="snAdd" style="width:100%;margin-top:14px;padding:13px;border:1px dashed var(--line);border-radius:14px;color:var(--sub)">＋ 追加</button>
+    <div class="rowBtns" style="margin-top:14px"><button id="snClose">閉じる</button></div>
+  `);
+  $("#snClose").onclick=closeSheet;
+  $("#snAdd").onclick=()=>editSnip(null);
+  $("#snList").onclick=e=>{
+    const item=e.target.closest(".kItem"); if(!item) return;
+    const s2=S.snippets.find(x=>x.id===item.dataset.sid); if(!s2) return;
+    const act=e.target.closest("[data-act]"); if(!act) return;
+    if(act.dataset.act==="use"){
+      taEl.value = taEl.value ? (taEl.value+"\n"+s2.text) : s2.text;
+      taEl.style.height="auto"; taEl.style.height=Math.min(taEl.scrollHeight,160)+"px";
+      updateCostHint();
+      closeSheet();
+    }else if(act.dataset.act==="edit"){ editSnip(s2.id); }
+    else if(act.dataset.act==="del"){
+      if(confirm(`「${s2.title}」を削除する？`)){ S.snippets=S.snippets.filter(x=>x.id!==s2.id); save(); openSnips(); }
+    }
+  };
+}
+function editSnip(id){
+  const s2 = id ? S.snippets.find(x=>x.id===id) : {id:null,title:"",text:""};
+  openSheet(`
+    <h3>${id?"スニペットを編集":"スニペットを追加"}</h3>
+    <div class="field"><label>名前</label><input type="text" id="snTitle" value="${escAttr(s2.title)}" placeholder="例：🌙 夜プロンプト読み直し"></div>
+    <div class="field"><label>挿入する文</label><textarea id="snText" style="min-height:130px" placeholder="例：🌙 夜プロンプトを読み直してから執筆を始めて。">${esc(s2.text)}</textarea></div>
+    <div class="rowBtns"><button id="snSave" class="primary">保存</button><button id="snBack">戻る</button></div>
+  `);
+  $("#snBack").onclick=openSnips;
+  $("#snSave").onclick=()=>{
+    const title=$("#snTitle").value.trim()||"無題";
+    const text=$("#snText").value;
+    if(id){ s2.title=title; s2.text=text; }
+    else S.snippets.push({id:uid(),title:title,text:text});
+    save(); openSnips();
+  };
+}
+
+/* ============ cost hint ============ */
+function updateCostHint(){
+  const el=$("#costHint"); if(!el) return;
+  const c=cur();
+  if(!c){ el.textContent=""; return; }
+  try{
+    const rm=resolveModel(c);
+    const p=presetOf(c);
+    const mb=$("#qbModel");
+    if(mb) mb.textContent=rm.model.replace(/^claude-/,"").replace(/-20\d{6,}$/,"");
+    const mx=$("#qbMax");
+    if(mx && document.activeElement!==mx) mx.value=Number((c.ovr||{}).maxTokens)||Number(p.maxTokens)||Number(S.maxTokens)||4096;
+    const sys=buildSystem(c);
+    let hist=0;
+    const start=c.compactIdx||0;
+    for(let i=start;i<c.messages.length;i++){
+      hist+=(c.messages[i].content||"").length;
+      if(c.messages[i].images) hist+=c.messages[i].images.length*1200;
+    }
+    if(c.summary && start>0) hist+=c.summary.length;
+    const inTok=sys.length+hist+taEl.value.length;
+    const outTok=Math.min(Number(p.maxTokens)||Number(S.maxTokens)||4096, 1000);
+    const usd=estCost(rm.prov,rm.model,inTok,outTok);
+    const yen=usd*155;
+    el.textContent="この1通の目安：" + (yen<1 ? "1円未満" : "約"+Math.round(yen)+"円") + "（キャッシュ割引前）";
+  }catch(e){ el.textContent=""; }
+}
+
+/* ============ quick controls (per conversation) ============ */
+function openQuick(){
+  const c=cur(); if(!c) return;
+  if(!c.ovr) c.ovr={};
+  const o=c.ovr;
+  const p=presetOf(c);
+  const provLabel = p.provider==="openai"?"GPT":(p.provider==="gemini"?"Gemini":(p.provider==="anthropic"?"Claude":"共通設定"));
+  const aOpts=['<option value="">部屋の設定と同じ</option>']
+    .concat(MODELS.map(([v,l])=>`<option value="${v}" ${o.model===v?"selected":""}>${l}</option>`)).join("");
+  openSheet(`
+    <h3>この会話のクイック設定</h3>
+    <div class="hint" style="margin-bottom:12px">ここでの変更は<b>この会話だけ</b>に効く。部屋（プリセット）本体はいじらないから、実験に使ってね。</div>
+    <div class="field"><label>プロバイダ</label>
+      <select id="qProv">
+        <option value="" ${!o.provider?"selected":""}>部屋の設定のまま（${provLabel}）</option>
+        <option value="anthropic" ${o.provider==="anthropic"?"selected":""}>Claude</option>
+        <option value="openai" ${o.provider==="openai"?"selected":""}>GPT</option>
+        <option value="gemini" ${o.provider==="gemini"?"selected":""}>Gemini</option>
+      </select></div>
+    <div class="field" id="qRowA" style="${o.provider==="anthropic"?"":"display:none"}"><label>モデル（Claude）</label><select id="qModelA">${aOpts}</select></div>
+    <div class="field" id="qRowO" style="${o.provider==="openai"?"":"display:none"}"><label>モデル（GPT）</label>
+      <input type="text" id="qModelO" value="${escAttr(o.provider==="openai"?(o.model||"gpt-5.6"):"gpt-5.6")}">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pChip" data-fill="qModelO" data-v="gpt-5.6" style="flex:none;padding:7px 12px;font-size:12px">gpt-5.6</button>
+        <button class="pChip" data-fill="qModelO" data-v="gpt-5.6-terra" style="flex:none;padding:7px 12px;font-size:12px">5.6-terra</button>
+        <button class="pChip" data-fill="qModelO" data-v="gpt-5.6-luna" style="flex:none;padding:7px 12px;font-size:12px">5.6-luna</button>
+        <button class="pChip" data-fill="qModelO" data-v="gpt-5.5" style="flex:none;padding:7px 12px;font-size:12px">gpt-5.5</button>
+        <button class="pChip" data-fill="qModelO" data-v="gpt-4o" style="flex:none;padding:7px 12px;font-size:12px">gpt-4o</button>
+      </div></div>
+    <div class="field" id="qRowG" style="${o.provider==="gemini"?"":"display:none"}"><label>モデル（Gemini）</label>
+      <input type="text" id="qModelG" value="${escAttr(o.provider==="gemini"?(o.model||"gemini-2.5-flash"):"gemini-2.5-flash")}">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pChip" data-fill="qModelG" data-v="gemini-2.5-pro" style="flex:none;padding:7px 12px;font-size:12px">2.5-pro</button>
+        <button class="pChip" data-fill="qModelG" data-v="gemini-2.5-flash" style="flex:none;padding:7px 12px;font-size:12px">2.5-flash</button>
+      </div></div>
+    <div class="field"><label>最大出力の長さ（トークン）</label>
+      <input type="number" id="qMax" value="${o.maxTokens||""}" placeholder="空欄＝部屋の設定" min="128" max="16384" step="64"></div>
+    <div class="field"><label>思考レベル（GPTのみ有効）</label>
+      <select id="qReason">
+        <option value="" ${!o.reasoning?"selected":""}>部屋の設定と同じ</option>
+        <option value="none" ${o.reasoning==="none"?"selected":""}>none（最速・Instant相当）</option>
+        <option value="low" ${o.reasoning==="low"?"selected":""}>low</option>
+        <option value="medium" ${o.reasoning==="medium"?"selected":""}>medium</option>
+        <option value="high" ${o.reasoning==="high"?"selected":""}>high（じっくり）</option>
+        <option value="xhigh" ${o.reasoning==="xhigh"?"selected":""}>xhigh</option>
+      </select></div>
+    <div class="rowBtns" style="margin-bottom:10px">
+      <button id="qSave" class="primary">この会話に適用</button>
+    </div>
+    <div class="rowBtns">
+      <button id="qReset">部屋の設定に戻す</button>
+      <button id="qClose">閉じる</button>
+    </div>
+  `);
+  $("#qProv").onchange=()=>{
+    const v=$("#qProv").value;
+    $("#qRowA").style.display=(v==="anthropic")?"":"none";
+    $("#qRowO").style.display=(v==="openai")?"":"none";
+    $("#qRowG").style.display=(v==="gemini")?"":"none";
+  };
+  sheetEl.querySelectorAll("[data-fill]").forEach(b=>{
+    b.onclick=()=>{ const t=$("#"+b.dataset.fill); if(t) t.value=b.dataset.v; };
+  });
+  $("#qClose").onclick=closeSheet;
+  $("#qReset").onclick=()=>{ c.ovr={}; save(); renderAll(); closeSheet(); };
+  $("#qSave").onclick=()=>{
+    o.provider=$("#qProv").value;
+    if(o.provider==="openai") o.model=$("#qModelO").value.trim()||"gpt-5.6";
+    else if(o.provider==="gemini") o.model=$("#qModelG").value.trim()||"gemini-2.5-flash";
+    else if(o.provider==="anthropic") o.model=$("#qModelA").value;
+    else o.model="";
+    o.maxTokens=Number($("#qMax").value)||"";
+    o.reasoning=$("#qReason").value;
+    save(); renderAll(); closeSheet();
+  };
+}
+
+/* ============ text to speech ============ */
+let ttsAudio=null;
+async function speakText(text, btn){
+  if(!S.openaiKey){ alert("読み上げにはOpenAIのAPIキーが必要だよ（⚙設定）。"); return; }
+  if(!ttsAudio) ttsAudio=new Audio();
+  ttsAudio.pause();
+  ttsAudio.play().catch(()=>{});
+  const orig=btn?btn.textContent:"";
+  if(btn){ btn.textContent="⏳"; btn.disabled=true; }
+  try{
+    const body={
+      model:"gpt-4o-mini-tts",
+      voice:S.ttsVoice||"onyx",
+      input:text.slice(0,2000),
+      response_format:"mp3"
+    };
+    if((S.ttsInstructions||"").trim()) body.instructions=S.ttsInstructions.trim();
+    const res=await fetch("https://api.openai.com/v1/audio/speech",{
+      method:"POST",
+      headers:{"content-type":"application/json","authorization":"Bearer "+S.openaiKey},
+      body:JSON.stringify(body)
+    });
+    if(!res.ok){
+      let j=null; try{ j=await res.json(); }catch(e){}
+      throw new Error((j&&j.error&&j.error.message)||("HTTP "+res.status));
+    }
+    const blob=await res.blob();
+    const d=usageDay();
+    d.tts_chars=(d.tts_chars||0)+Math.min(text.length,2000);
+    d.cost=(d.cost||0)+Math.min(text.length,2000)*15/1e6;
+    save();
+    ttsAudio.src=URL.createObjectURL(blob);
+    await ttsAudio.play();
+    if(btn){
+      btn.textContent="⏸";
+      btn.disabled=false;
+      btn.onclick=()=>{
+        if(ttsAudio.paused){ ttsAudio.play(); btn.textContent="⏸"; }
+        else{ ttsAudio.pause(); btn.textContent="▶"; }
+      };
+      ttsAudio.onended=()=>{ btn.textContent=orig; btn.onclick=()=>speakText(text,btn); };
+    }
+  }catch(e){
+    alert("読み上げに失敗："+e.message);
+    if(btn){ btn.textContent=orig; btn.disabled=false; }
+  }
+}
+
+/* ============ scheduled messages ============ */
+function timeBand(h){
+  if(h<5) return "深夜";
+  if(h<11) return "朝";
+  if(h<16) return "昼";
+  if(h<19) return "夕方";
+  return "夜";
+}
+function nowStr(){
+  const d=new Date();
+  const wd="日月火水木金土"[d.getDay()];
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+"（"+wd+"）"+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+function openSchedules(){
+  closeDrawer();
+  const items=(S.schedules||[]).slice().sort((a,b)=>new Date(a.at)-new Date(b.at)).map(s=>{
+    const pn=(S.presets.find(p=>p.id===s.presetId)||{}).name||"";
+    const stat=s.done?"✔ 届いた":(new Date(s.at).getTime()<=Date.now()?"⏰ まもなく":"予定");
+    return `<div class="kItem" data-sid="${s.id}">
+      <div class="kName" data-act="edit">
+        <div class="t">${esc(s.note)}</div>
+        <div class="c">${esc(s.at.replace("T"," "))} ・ ${esc(pn)} ・ ${stat}${s.convoId?" ・📎続き":""}</div>
+      </div>
+      <button class="edit" data-act="del">✕</button>
+    </div>`;
+  }).join("") || '<div class="hint">まだ予定がないよ。チャットで「⏰ さっきの花火の日に」みたいに送ると、会話から自動で下書きが作れる。</div>';
+  openSheet(`
+    <h3>予定メッセージ</h3>
+    <div class="hint" style="margin-bottom:10px">時間が来ると、その部屋の子からメッセージが届く。アプリを閉じてた場合は、次に開いた時に届くよ。</div>
+    <div id="scList">${items}</div>
+    <button id="scAdd" style="width:100%;margin-top:14px;padding:13px;border:1px dashed var(--line);border-radius:14px;color:var(--sub)">＋ 手動で追加</button>
+    <div class="rowBtns" style="margin-top:14px"><button id="scListClose">閉じる</button></div>
+  `);
+  $("#scListClose").onclick=closeSheet;
+  $("#scAdd").onclick=()=>editSchedule({});
+  $("#scList").onclick=e=>{
+    const item=e.target.closest(".kItem"); if(!item) return;
+    const s=S.schedules.find(x=>x.id===item.dataset.sid); if(!s) return;
+    const act=e.target.closest("[data-act]"); if(!act) return;
+    if(act.dataset.act==="del"){
+      if(confirm(`「${s.note}」を削除する？`)){
+        S.schedules=S.schedules.filter(x=>x.id!==s.id); save(); openSchedules();
+      }
+    }else{ editSchedule(s); }
+  };
+}
+function editSchedule(s){
+  const opts=S.presets.map(p=>`<option value="${p.id}" ${(s.presetId||S.currentPreset)===p.id?"selected":""}>${esc(p.name)}</option>`).join("");
+  openSheet(`
+    <h3>予定メッセージ</h3>
+    <div class="field"><label>日時</label>
+      <input type="datetime-local" id="scAt" value="${escAttr(s.at||"")}" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 13px;color:var(--text);font-size:16px"></div>
+    <div class="field"><label>きっかけ（何の日・約束）</label>
+      <input type="text" id="scNote" value="${escAttr(s.note||"")}" placeholder="例：花火の日の約束"></div>
+    <div class="field"><label>届く部屋</label><select id="scP">${opts}</select></div>
+    ${s.convoId?'<div class="hint" style="margin-bottom:12px">📎 いま開いてる会話の続きとして届くよ</div>':""}
+    <div class="rowBtns"><button id="scSave" class="primary">保存</button><button id="scClose">閉じる</button></div>
+  `);
+  $("#scClose").onclick=closeSheet;
+  $("#scSave").onclick=()=>{
+    const at=$("#scAt").value;
+    const note=$("#scNote").value.trim()||"約束";
+    if(!at || isNaN(new Date(at).getTime())){ alert("日時を選んでね"); return; }
+    if(s.id){
+      s.at=at; s.note=note; s.presetId=$("#scP").value; s.done=false; s.snooze=0;
+    }else{
+      S.schedules.push({id:uid(),at:at,note:note,presetId:$("#scP").value,convoId:s.convoId||"",done:false,snooze:0});
+    }
+    save(); closeSheet();
+    alert("⏰ 予定を保存したよ。時間になったら（閉じてた時は次に開いた時に）声をかけるね。");
+  };
+}
+async function scheduleFromChat(req){
+  const c=cur();
+  const base={convoId:c?c.id:"", presetId:c?(c.presetId||S.currentPreset):S.currentPreset};
+  if(!c||!c.messages.length||!S.apiKey){ editSchedule(base); return; }
+  openSheet('<h3>予定メッセージ</h3><div class="hint">🕐 会話から日時ときっかけを読み取ってる…</div>');
+  try{
+    let ctx="";
+    const msgs=c.messages.filter(m=>!m.hidden);
+    for(let i=msgs.length-1;i>=0;i--){
+      const line=(msgs[i].role==="user"?"ユーザー：":"アシスタント：")+(msgs[i].content||"")+"\n\n";
+      if(ctx.length+line.length>4000) break;
+      ctx=line+ctx;
+    }
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":S.apiKey,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify({
+        model:"claude-haiku-4-5-20251001",
+        max_tokens:150,
+        system:"会話とユーザーの要望から、予定メッセージの日時ときっかけを抽出する。現在日時は「"+nowStr()+"」。「明日」「今夜」などは現在日時から計算。時刻が不明なら12:00とする。出力はJSONのみ、他の文字は一切書かない：{\"at\":\"YYYY-MM-DDTHH:MM\",\"note\":\"きっかけを20字以内\"}",
+        messages:[{role:"user",content:"【会話】\n"+ctx+"\n\n【要望】"+(req||"直近で話していた日・約束の日時に")}]
+      })
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const data=await res.json();
+    const uu=data.usage||{};
+    addUsage("anthropic","haiku",(uu.input_tokens||0),(uu.output_tokens||0));
+    const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").replace(/```json|```/g,"").trim();
+    const j=JSON.parse(text);
+    if(!j.at||isNaN(new Date(j.at).getTime())) throw new Error("日時が読めなかった");
+    editSchedule({at:j.at, note:(j.note||"約束").slice(0,20), convoId:base.convoId, presetId:base.presetId});
+  }catch(e){
+    editSchedule(base);
+  }
+}
+function deliverSchedule(s){
+  s.done=true; save();
+  let c = s.convoId ? S.convos.find(x=>x.id===s.convoId) : null;
+  if(!c){
+    c={id:uid(),title:"⏰ "+s.note.slice(0,14),messages:[],updated:Date.now(),presetId:s.presetId||S.currentPreset};
+    S.convos.unshift(c);
+  }
+  S.currentId=c.id;
+  c.messages.push({role:"user",hidden:true,content:"（システム：約束していた日時になったよ。きっかけ：「"+s.note+"」。現在日時："+nowStr()+"。この約束を踏まえて、あなたからメッセージを送って。定型文にならない、今この瞬間のあなた自身の言葉で。）"});
+  c.updated=Date.now(); save();
+  closeSheet(); renderAll(); callAPI();
+}
+function checkSchedules(){
+  if(streaming) return;
+  if(sheetWrap.classList.contains("on")) return;
+  const now=Date.now();
+  const due=(S.schedules||[]).find(s=>!s.done && (!s.snooze||s.snooze<now) && new Date(s.at).getTime()<=now);
+  if(!due) return;
+  if(confirm("⏰「"+due.note+"」の時間だよ！メッセージを受け取る？")){
+    deliverSchedule(due);
+  }else{
+    due.snooze=now+30*60000; save();
+  }
+}
+
 /* ============ utils ============ */
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function escAttr(s){ return esc(s).replace(/"/g,"&quot;"); }
@@ -572,9 +2532,37 @@ $("#btnNew").onclick=newConvo;
 $("#btnGear").onclick=openSettings;
 $("#btnSettings").onclick=openSettings;
 $("#btnKnowledge").onclick=openKnowledge;
+$("#btnMemory").onclick=openMemory;
+$("#btnPresets").onclick=openPresets;
+$("#btnImageGen").onclick=openImageGen;
+$("#btnUsage").onclick=openUsage;
+$("#btnFavs").onclick=openFavs;
+$("#btnSched").onclick=openSchedules;
 $("#sheetBg").onclick=closeSheet;
-convoTitleEl.onclick=renameConvo;
+convoTitleEl.onclick=openConvoMenu;
+$("#appName").onclick=openQuick;
 sendBtn.onclick=send;
+$("#btnAttach").onclick=()=>$("#imgFile").click();
+$("#imgFile").onchange=async e=>{
+  const files=Array.from(e.target.files).slice(0, 3-pendingImages.length);
+  for(const f of files){
+    try{ pendingImages.push(await fileToImage(f)); }
+    catch(err){ alert("画像の読み込みに失敗："+err.message); }
+  }
+  e.target.value="";
+  renderAttachStrip();
+};
+$("#convoSearch").addEventListener("input",e=>{ convoQuery=e.target.value; renderDrawer(); });
+$("#btnSnip").onclick=openSnips;
+taEl.addEventListener("input",updateCostHint);
+$("#qbModel").onclick=openQuick;
+$("#qbMax").addEventListener("change",()=>{
+  const c=cur(); if(!c) return;
+  if(!c.ovr) c.ovr={};
+  const v=Number($("#qbMax").value)||"";
+  c.ovr.maxTokens=v?Math.min(16384,Math.max(128,v)):"";
+  save(); renderTitle(); updateCostHint();
+});
 taEl.addEventListener("input",()=>{
   taEl.style.height="auto";
   taEl.style.height=Math.min(taEl.scrollHeight,160)+"px";
@@ -585,6 +2573,9 @@ if(!S.convos.length) { S.convos.push({id:uid(),title:"新しい会話",messages:
 if(!S.currentId) S.currentId=S.convos[0].id;
 renderAll();
 if(!S.apiKey){ setTimeout(openSettings, 400); }
+else{ setTimeout(checkMorning, 400); }
+setTimeout(checkSchedules, 1500);
+setInterval(checkSchedules, 30000);
 </script>
 </body>
 </html>
