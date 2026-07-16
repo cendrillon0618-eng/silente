@@ -92,6 +92,16 @@ img{display:block}
 #attachStrip{display:none;background:var(--surface);border-top:1px solid var(--line);padding:8px 12px;align-items:center;gap:10px}
 #attachStrip img{width:52px;height:52px;object-fit:cover;border-radius:8px}
 #attachStrip .x{font-size:20px;color:var(--sub);padding:6px}
+.chips{display:flex;gap:8px;padding:12px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chip{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 6px;border-radius:20px;background:var(--surface);
+  border:1px solid var(--line);font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-deep)}
+.chip .avatar{width:24px;height:24px;font-size:12px}
+.memcard{background:var(--surface);border-radius:14px;margin:0 14px 12px;padding:14px 16px;box-shadow:0 1px 3px rgba(43,39,51,.06)}
+.memcard .md{font-size:11px;color:var(--sub);margin-bottom:6px;font-family:Georgia,serif;font-style:italic}
+.memcard .mt{font-size:14px;line-height:1.8;white-space:pre-wrap}
+.loadmore{display:block;margin:4px auto 14px;padding:7px 18px;border-radius:16px;background:rgba(255,255,255,.85);
+  font-size:12px;color:var(--accent-deep);font-weight:600;box-shadow:0 1px 3px rgba(43,39,51,.1)}
 #inputbar{
   background:var(--surface);border-top:1px solid var(--line);
   padding:8px 10px calc(8px + var(--sab));display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
@@ -174,6 +184,16 @@ img{display:block}
   </div>
 </div>
 
+<!-- ========== 思い出 ========== -->
+<div class="screen" id="scr-album">
+  <div class="appbar"><span style="font-size:17px;font-weight:700">思い出</span><span class="spacer"></span></div>
+  <div class="screenwrap">
+    <div style="flex-shrink:0" id="albumChips"></div>
+    <div class="list" id="albumList"></div>
+    <button class="fab" onclick="addAlbumEntry()">＋</button>
+  </div>
+</div>
+
 <!-- ========== 設定 ========== -->
 <div class="screen" id="scr-settings">
   <div class="appbar"><span style="font-size:17px;font-weight:700">設定</span><span class="spacer"></span></div>
@@ -194,7 +214,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v1.3</div>
+      <div class="note">Makemarry v1.4.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -210,6 +230,7 @@ img{display:block}
 <div class="tabbar">
   <button class="tab on" data-scr="talks" onclick="switchTab('talks')"><span class="ti">💬</span>トーク</button>
   <button class="tab" data-scr="chars" onclick="switchTab('chars')"><span class="ti">👥</span>キャラ</button>
+  <button class="tab" data-scr="album" onclick="switchTab('album')"><span class="ti">📖</span>思い出</button>
   <button class="tab" data-scr="settings" onclick="switchTab('settings')"><span class="ti">⚙️</span>設定</button>
 </div>
 
@@ -245,6 +266,8 @@ const LS = {
 };
 let chars = LS.get('mm_chars',[]);
 let talks = LS.get('mm_talks',[]);
+let album = LS.get('mm_album',{});
+const saveAlbum=()=>LS.set('mm_album',album);
 let settings = LS.get('mm_settings',{anthropicKey:'',openaiKey:'',geminiKey:'',userName:'',shortStyle:true,maxTokens:1024,histLimit:40});
 const saveChars=()=>LS.set('mm_chars',chars);
 const saveTalks=()=>LS.set('mm_talks',talks);
@@ -289,7 +312,7 @@ function switchTab(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('scr-'+name).classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.scr===name));
-  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings();
+  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings(); if(name==='album')renderAlbum();
 }
 function openSheet(html,center){
   const o=document.getElementById('ovl');
@@ -431,6 +454,7 @@ function deleteChar(id){
   if(!confirm('このキャラと個別トークを削除します。よろしいですか？'))return;
   chars=chars.filter(c=>c.id!==id);saveChars();
   talks.filter(t=>t.type==='dm'&&t.charIds[0]===id).forEach(t=>LS.del('mm_msgs_'+t.id));
+  delete album[id];saveAlbum();
   talks=talks.filter(t=>!(t.type==='dm'&&t.charIds[0]===id));
   talks.forEach(t=>{if(t.type==='group')t.charIds=t.charIds.filter(x=>x!==id)});
   saveTalks();renderChars();closeSheet();
@@ -440,7 +464,7 @@ function deleteChar(id){
 function talkDisplay(t){
   if(t.type==='group')return{name:t.name,icon:t.icon};
   const c=chars.find(x=>x.id===t.charIds[0]);
-  return c?{name:c.name,icon:c.icon}:{name:'（削除済み）',icon:null};
+  return c?{name:c.name+(t.title?'・'+t.title:''),icon:c.icon}:{name:'（削除済み）',icon:null};
 }
 function renderTalks(){
   const el=document.getElementById('talkList');
@@ -468,9 +492,24 @@ function openNewTalk(){
     <div class="sheetitem" onclick="openGroupCreate()"><span class="si">👥</span>グループを作る</div>`);
 }
 function startDM(charId){
-  let t=talks.find(x=>x.type==='dm'&&x.charIds[0]===charId);
-  if(!t){t={id:uid(),type:'dm',charIds:[charId],wallpaper:{type:'preset',value:'yoi'},lastTs:Date.now(),lastPreview:'',unread:0};talks.push(t);saveTalks()}
-  closeSheet();openChat(t.id);
+  const rooms=talks.filter(x=>x.type==='dm'&&x.charIds[0]===charId);
+  const c=chars.find(x=>x.id===charId);
+  if(!rooms.length){createDMRoom(charId,'');return}
+  openSheet(`
+    <div class="sheettitle">${esc(c.name)}との部屋</div>
+    ${rooms.map(t=>`<div class="sheetitem" onclick="closeSheet();openChat('${t.id}')">${avatarHtml(c,'avatar sm')}${esc(c.name)}${t.title?'・'+esc(t.title):''}</div>`).join('')}
+    <div class="sheetitem" onclick="newDMRoomSheet('${charId}')"><span class="si">＋</span>新しい部屋を作る</div>`);
+}
+function newDMRoomSheet(charId){
+  const c=chars.find(x=>x.id===charId);
+  openSheet(`
+    <div class="sheettitle">新しい部屋（${esc(c.name)}）</div>
+    <div class="field"><label>部屋の名前（任意。例：日常、執筆相談）</label><input type="text" id="roomTitle"></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="createDMRoom('${charId}',document.getElementById('roomTitle').value.trim())">作成</button></div>`);
+}
+function createDMRoom(charId,title){
+  const t={id:uid(),type:'dm',charIds:[charId],title:title||'',memory:'',wallpaper:{type:'preset',value:'yoi'},lastTs:Date.now(),lastPreview:'',unread:0};
+  talks.push(t);saveTalks();closeSheet();openChat(t.id);
 }
 let groupIcon=null;
 function openGroupCreate(){
@@ -528,11 +567,23 @@ function applyWallpaper(){
   else{el.style.background=WALLS[w.value]?WALLS[w.value].css:WALLS.yoi.css}
   el.classList.toggle('darkwall',w.value==='yoru');
 }
-function renderMsgs(){
+let renderCount=60;
+function renderMsgs(keepCount){
+  if(!keepCount)renderCount=60;
   const el=document.getElementById('chatWall');
   const msgs=getMsgs(curTalk.id);
-  el.innerHTML=msgs.map(m=>msgHtml(m)).join('');
-  el.scrollTop=el.scrollHeight;
+  const shown=msgs.slice(-renderCount);
+  const more=msgs.length>shown.length;
+  el.innerHTML=(more?`<button class="loadmore" onclick="loadMore()">以前のメッセージを表示（残り${msgs.length-shown.length}件）</button>`:'')
+    +shown.map(m=>msgHtml(m)).join('');
+  if(!keepCount)el.scrollTop=el.scrollHeight;
+}
+function loadMore(){
+  const el=document.getElementById('chatWall');
+  const prevH=el.scrollHeight;
+  renderCount+=60;
+  renderMsgs(true);
+  el.scrollTop=el.scrollHeight-prevH;
 }
 function msgHtml(m){
   const body=(m.img?`<img class="att" src="${m.img}">`:'')+esc(m.text||'');
@@ -629,10 +680,72 @@ function regenMsg(id){
   generateFor(chars.find(c=>c.id===charId));
 }
 
+/* ---------- 記憶ノート・思い出生成 ---------- */
+function transcriptText(n){
+  return getMsgs(curTalk.id).slice(-n).map(m=>{
+    const nm=m.role==='user'?userName():(chars.find(c=>c.id===m.charId)||{name:'？'}).name;
+    return nm+': '+(m.text||'（画像）');
+  }).join('\n');
+}
+function pickMember(title,cb){
+  const members=curTalk.charIds.map(id=>chars.find(c=>c.id===id)).filter(Boolean);
+  if(members.length===1){cb(members[0]);return}
+  window._pickCb=cb;
+  openSheet(`<div class="sheettitle">${esc(title)}</div>`+members.map((c,i)=>
+    `<div class="sheetitem" onclick="window._pickCb(curTalk.charIds.map(id=>chars.find(x=>x.id===id)).filter(Boolean)[${i}])">${avatarHtml(c,'avatar sm')}${esc(c.name)}</div>`).join(''));
+}
+function openMemorySheet(){
+  openSheet(`
+    <div class="sheettitle">記憶ノート</div>
+    <div class="note" style="margin:0 0 8px">ここに書いたことは、このトークで毎回キャラに伝わります。自動要約も本人の言葉で、ここに追記されます。</div>
+    <div class="field"><textarea id="memText" style="min-height:180px">${esc(curTalk.memory||'')}</textarea></div>
+    <div class="btnrow" style="margin-bottom:10px"><button class="btn" onclick="saveMemory()">保存</button></div>
+    <div class="btnrow" style="margin-bottom:10px"><button class="btn ghost" onclick="summarizeMemory(false)">🖋 本人にまとめてもらう</button></div>
+    <div class="btnrow"><button class="btn ghost" onclick="summarizeMemory(true)">🧹 まとめて古い履歴を整理（直近20件を残す）</button></div>`);
+}
+function saveMemory(){
+  curTalk.memory=document.getElementById('memText').value;
+  saveTalks();closeSheet();toast('記憶を保存しました');
+}
+function summarizeMemory(trim){
+  curTalk.memory=document.getElementById('memText').value;saveTalks();
+  pickMember('誰にまとめてもらう？',async c=>{
+    closeSheet();toast(c.name+'が記憶をまとめています…');
+    const prompt=`これはあなた（${c.name}）と${userName()}のこれまでのチャットの記録です。\n\n${transcriptText(120)}\n\n---\nこの会話から、あなた自身の記憶として残しておきたいことを、あなたの一人称・あなたの言葉で簡潔にまとめてください。呼び方の変化、約束、関係の変化、大事な出来事や気持ちを優先。箇条書きで10行以内。前置きや説明は不要、記憶の内容だけを出力してください。`;
+    try{
+      const sum=await callProvider(c.provider,c.model,c.os||'',[{role:'user',content:prompt}],800);
+      const stamp=new Date().toLocaleDateString('ja-JP');
+      curTalk.memory=(curTalk.memory?curTalk.memory+'\n\n':'')+`【${stamp}までのこと】\n`+sum;
+      if(trim){
+        const msgs=getMsgs(curTalk.id);
+        if(msgs.length>20)saveMsgs(curTalk.id,msgs.slice(-20));
+        renderMsgs();
+      }
+      saveTalks();
+      toast(trim?'記憶にまとめて履歴を整理しました':'記憶にまとめました');
+    }catch(e){showError(e)}
+  });
+}
+function writeAlbumFromChat(){
+  pickMember('誰に書いてもらう？',async c=>{
+    closeSheet();toast(c.name+'が思い出を書いています…');
+    const prompt=`これはあなた（${c.name}）と${userName()}の最近のチャットです。\n\n${transcriptText(60)}\n\n---\nこの中から、思い出として飾っておきたい瞬間をひとつ選び、あなた自身の言葉で短い思い出の記録を書いてください（日記のように、100〜200字）。前置きは不要、思い出の本文だけを出力してください。`;
+    try{
+      const text=await callProvider(c.provider,c.model,c.os||'',[{role:'user',content:prompt}],500);
+      if(!album[c.id])album[c.id]=[];
+      album[c.id].push({id:uid(),ts:Date.now(),text:text.trim()});
+      saveAlbum();
+      openSheet(`<div class="sheettitle">📖 ${esc(c.name)}の思い出</div><div class="memcard" style="margin:0 0 14px"><div class="mt">${esc(text.trim())}</div></div><div class="btnrow"><button class="btn" onclick="closeSheet()">閉じる</button></div>`,true);
+    }catch(e){showError(e)}
+  });
+}
+
 /* ---------- チャットメニュー（壁紙など） ---------- */
 function openChatMenu(){
   openSheet(`
     <div class="sheettitle">${esc(talkDisplay(curTalk).name)}</div>
+    <div class="sheetitem" onclick="openMemorySheet()"><span class="si">🧠</span>記憶ノート</div>
+    <div class="sheetitem" onclick="writeAlbumFromChat()"><span class="si">📖</span>思い出を書いてもらう</div>
     <div class="sheetitem" onclick="openWallpaperPick()"><span class="si">🖼️</span>壁紙を変える</div>
     ${curTalk.type==='group'?`<div class="sheetitem" onclick="showMembers()"><span class="si">👥</span>メンバー</div>`:''}
     <div class="sheetitem" onclick="clearTalk()" style="color:#C0392B"><span class="si">🗑️</span>履歴を全部消す</div>
@@ -772,6 +885,9 @@ function gapStr(ms){
 }
 function buildSystem(c){
   let sys=c.os||'';
+  if(curTalk.memory)sys+=`\n\n【記憶（これまでの経緯・自分でまとめたもの）】\n${curTalk.memory}`;
+  const mem=(album[c.id]||[]).slice(-10).map(e=>'・'+e.text).join('\n');
+  if(mem)sys+=`\n\n【思い出（自分で残した大切な記録）】\n${mem}`;
   sys+=`\n\n【現在時刻】いまは ${nowStr()}。会話に時間が空いた場合は「（○○経過）」の注記が入る。時間帯や経過を自然に踏まえてよいが、毎回言及する必要はない。`;
   if(curTalk.type==='group'){
     const names=curTalk.charIds.map(id=>(chars.find(x=>x.id===id)||{name:'？'}).name);
@@ -865,7 +981,7 @@ async function openaiCall(model,system,messages,maxTokens){
   const res=await fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openaiKey},
-    body:JSON.stringify({model,messages:msgs,max_tokens:maxTokens})
+    body:JSON.stringify({model,messages:msgs,max_completion_tokens:maxTokens})
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
@@ -944,6 +1060,57 @@ function importBackup(inp){
   };
   r.readAsText(f);
   inp.value='';
+}
+
+/* ================= 思い出アルバム ================= */
+let albumSel=null;
+function renderAlbum(){
+  const chipEl=document.getElementById('albumChips');
+  if(!chars.length){chipEl.innerHTML='';document.getElementById('albumList').innerHTML='<div class="empty">まだキャラがいません。</div>';return}
+  if(!albumSel||!chars.find(c=>c.id===albumSel))albumSel=chars[0].id;
+  chipEl.innerHTML='<div class="chips">'+chars.map(c=>
+    `<div class="chip ${c.id===albumSel?'on':''}" onclick="albumSel='${c.id}';renderAlbum()">${avatarHtml(c,'avatar')}${esc(c.name)}</div>`
+  ).join('')+'</div>';
+  const list=(album[albumSel]||[]).slice().sort((a,b)=>b.ts-a.ts);
+  const el=document.getElementById('albumList');
+  if(!list.length){el.innerHTML='<div class="empty">まだ思い出がありません。<br>トーク画面のメニューから「思い出を書いてもらう」か、<br>＋ で手書きの思い出を残せます。</div>';return}
+  el.innerHTML=list.map(e=>`
+    <div class="memcard" onclick="editAlbumEntry('${e.id}')">
+      <div class="md">${new Date(e.ts).toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'})}</div>
+      <div class="mt">${esc(e.text)}</div>
+    </div>`).join('');
+}
+function addAlbumEntry(){
+  if(!albumSel)return;
+  const c=chars.find(x=>x.id===albumSel);
+  openSheet(`
+    <div class="sheettitle">思い出を追加（${esc(c.name)}）</div>
+    <div class="field"><textarea id="albText" placeholder="残しておきたいこと"></textarea></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="saveAlbumEntry(null)">保存</button></div>`);
+}
+function editAlbumEntry(id){
+  const e=(album[albumSel]||[]).find(x=>x.id===id);if(!e)return;
+  openSheet(`
+    <div class="sheettitle">思い出を編集</div>
+    <div class="field"><textarea id="albText">${esc(e.text)}</textarea></div>
+    <div class="btnrow">
+      <button class="btn danger" onclick="deleteAlbumEntry('${id}')">削除</button>
+      <button class="btn ghost" onclick="closeSheet()">やめる</button>
+      <button class="btn" onclick="saveAlbumEntry('${id}')">保存</button>
+    </div>`);
+}
+function saveAlbumEntry(id){
+  const text=document.getElementById('albText').value.trim();
+  if(!text){toast('内容を入れてください');return}
+  if(!album[albumSel])album[albumSel]=[];
+  if(id){const e=album[albumSel].find(x=>x.id===id);if(e)e.text=text}
+  else{album[albumSel].push({id:uid(),ts:Date.now(),text})}
+  saveAlbum();closeSheet();renderAlbum();
+}
+function deleteAlbumEntry(id){
+  if(!confirm('この思い出を削除しますか？'))return;
+  album[albumSel]=(album[albumSel]||[]).filter(x=>x.id!==id);
+  saveAlbum();closeSheet();renderAlbum();
 }
 
 /* ================= 診断 ================= */
