@@ -87,6 +87,11 @@ img{display:block}
 .msgtime{font-size:10px;color:rgba(43,39,51,.5);flex-shrink:0;text-shadow:0 0 4px rgba(255,255,255,.6)}
 .typing .bubble{color:var(--sub);letter-spacing:2px}
 .darkwall .msgtime,.darkwall .msgname{color:rgba(255,255,255,.75);text-shadow:none}
+.bubble img.att{max-width:100%;border-radius:10px;margin-bottom:6px}
+.bubble.imgonly{padding:4px;background:transparent;box-shadow:none}
+#attachStrip{display:none;background:var(--surface);border-top:1px solid var(--line);padding:8px 12px;align-items:center;gap:10px}
+#attachStrip img{width:52px;height:52px;object-fit:cover;border-radius:8px}
+#attachStrip .x{font-size:20px;color:var(--sub);padding:6px}
 #inputbar{
   background:var(--surface);border-top:1px solid var(--line);
   padding:8px 10px calc(8px + var(--sab));display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
@@ -189,7 +194,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v1.2</div>
+      <div class="note">Makemarry v1.3</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -218,7 +223,10 @@ img{display:block}
     <button class="iconbtn" onclick="openChatMenu()">☰</button>
   </div>
   <div id="chatWall"></div>
+  <div id="attachStrip"><img id="attachPrev"><span style="flex:1;font-size:13px;color:var(--sub)">画像を添付中</span><button class="x" onclick="clearAttach()">✕</button></div>
   <div id="inputbar">
+    <button class="iconbtn" style="flex-shrink:0" onclick="document.getElementById('attachFile').click()">📷</button>
+    <input type="file" id="attachFile" accept="image/*" style="display:none" onchange="pickAttach(this)">
     <textarea id="msgInput" rows="1" placeholder="メッセージ" oninput="autosize(this)"></textarea>
     <button id="sendBtn" onclick="sendMessage()">↑</button>
   </div>
@@ -347,11 +355,9 @@ function openCharEdit(id){
         <option value="gemini"${c&&c.provider==='gemini'?' selected':''}>Gemini（Google）</option>
       </select>
     </div>
-    <div class="field"><label>モデル名</label><input type="text" id="ceModel" value="${c?esc(c.model):''}" list="modelSuggest">
-      <datalist id="modelSuggest">
-        <option value="claude-opus-4-6"><option value="claude-opus-4-8"><option value="claude-sonnet-4-6"><option value="claude-fable-5">
-        <option value="gpt-4o"><option value="gemini-2.0-flash">
-      </datalist>
+    <div class="field"><label>モデル</label>
+      <select id="ceModelSel" onchange="ceModelSelChange()"></select>
+      <input type="text" id="ceModel" value="${c?esc(c.model):''}" placeholder="モデルIDを直接入力" style="margin-top:8px;display:none">
     </div>
     <div class="field"><label>キャラOS（システムプロンプト）</label><textarea id="ceOS" placeholder="話し方・性格・関係性・禁則など。ここに書いたものがそのまま核になります。">${c?esc(c.os):''}</textarea></div>
     <div class="btnrow">
@@ -361,10 +367,45 @@ function openCharEdit(id){
     </div>`);
   ceModelPlaceholder();
 }
+const MODELS={
+  anthropic:[
+    ['claude-opus-4-6','Opus 4.6'],
+    ['claude-opus-4-7','Opus 4.7'],
+    ['claude-opus-4-8','Opus 4.8'],
+    ['claude-fable-5','Fable 5'],
+    ['claude-sonnet-5','Sonnet 5'],
+    ['claude-sonnet-4-6','Sonnet 4.6'],
+    ['claude-haiku-4-5-20251001','Haiku 4.5']
+  ],
+  openai:[
+    ['gpt-4o','GPT-4o'],
+    ['gpt-5.5','GPT-5.5'],
+    ['gpt-5.6','GPT-5.6'],
+    ['gpt-5.6-terra','GPT-5.6 Terra'],
+    ['gpt-5.6-luna','GPT-5.6 Luna']
+  ],
+  gemini:[
+    ['gemini-2.0-flash','Gemini 2.0 Flash'],
+    ['gemini-2.5-pro','Gemini 2.5 Pro'],
+    ['gemini-2.5-flash','Gemini 2.5 Flash']
+  ]
+};
 function ceModelPlaceholder(){
   const p=document.getElementById('ceProvider').value;
-  const m=document.getElementById('ceModel');
-  m.placeholder={anthropic:'claude-opus-4-6',openai:'gpt-4o',gemini:'gemini-2.0-flash'}[p];
+  const sel=document.getElementById('ceModelSel');
+  const inp=document.getElementById('ceModel');
+  const list=MODELS[p]||[];
+  sel.innerHTML=list.map(m=>`<option value="${m[0]}">${m[1]}（${m[0]}）</option>`).join('')+'<option value="__custom__">カスタム（IDを直接入力）</option>';
+  const cur=inp.value.trim();
+  if(cur&&list.some(m=>m[0]===cur)){sel.value=cur;inp.style.display='none'}
+  else if(cur){sel.value='__custom__';inp.style.display='block'}
+  else{sel.value=list[0][0];inp.style.display='none'}
+}
+function ceModelSelChange(){
+  const sel=document.getElementById('ceModelSel');
+  const inp=document.getElementById('ceModel');
+  if(sel.value==='__custom__'){inp.style.display='block';inp.focus()}
+  else{inp.style.display='none'}
 }
 function pickCharIcon(inp){
   if(!inp.files[0])return;
@@ -379,7 +420,7 @@ function saveChar(id){
   const data={
     name, icon:editIcon,
     provider:document.getElementById('ceProvider').value,
-    model:document.getElementById('ceModel').value.trim()||document.getElementById('ceModel').placeholder,
+    model:(document.getElementById('ceModelSel').value==='__custom__'?document.getElementById('ceModel').value.trim():document.getElementById('ceModelSel').value),
     os:document.getElementById('ceOS').value
   };
   if(id){Object.assign(chars.find(c=>c.id===id),data)}
@@ -494,9 +535,11 @@ function renderMsgs(){
   el.scrollTop=el.scrollHeight;
 }
 function msgHtml(m){
+  const body=(m.img?`<img class="att" src="${m.img}">`:'')+esc(m.text||'');
+  const bcls='bubble'+(m.img&&!m.text?' imgonly':'');
   if(m.role==='user'){
     return `<div class="msgline me" onclick="msgActions('${m.id}')">
-      <div class="msgcol"><div class="bubble">${esc(m.text)}</div></div>
+      <div class="msgcol"><div class="${bcls}">${body}</div></div>
       <span class="msgtime">${fmtTime(m.ts)}</span></div>`;
   }
   const c=chars.find(x=>x.id===m.charId);
@@ -505,7 +548,7 @@ function msgHtml(m){
     ${avatarHtml(c||{name:'？'},'avatar sm')}
     <div class="msgcol">
       ${showName?`<div class="msgname">${esc(c?c.name:'？')}</div>`:''}
-      <div class="bubble">${esc(m.text)}</div>
+      <div class="${bcls}">${body}</div>
     </div>
     <span class="msgtime">${fmtTime(m.ts)}</span></div>`;
 }
@@ -515,10 +558,21 @@ function appendMsgEl(m){
   el.scrollTop=el.scrollHeight;
 }
 function autosize(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,110)+'px'}
+let pendingImg=null;
+function pickAttach(inp){
+  if(!inp.files[0])return;
+  resizeImage(inp.files[0],640,url=>{
+    pendingImg=url;
+    document.getElementById('attachPrev').src=url;
+    document.getElementById('attachStrip').style.display='flex';
+  });
+  inp.value='';
+}
+function clearAttach(){pendingImg=null;document.getElementById('attachStrip').style.display='none'}
 function pushMsg(m){
   const msgs=getMsgs(curTalk.id);msgs.push(m);saveMsgs(curTalk.id,msgs);
   curTalk.lastTs=m.ts;
-  curTalk.lastPreview=(m.role==='user'?userName():(chars.find(c=>c.id===m.charId)||{name:'？'}).name)+': '+m.text.slice(0,40);
+  curTalk.lastPreview=(m.role==='user'?userName():(chars.find(c=>c.id===m.charId)||{name:'？'}).name)+': '+(m.text?m.text.slice(0,40):'📷 画像');
   saveTalks();
 }
 
@@ -626,9 +680,10 @@ async function sendMessage(){
   if(generating)return;
   const inp=document.getElementById('msgInput');
   const text=inp.value.trim();
-  if(!text)return;
+  if(!text&&!pendingImg)return;
   inp.value='';autosize(inp);
   const m={id:uid(),role:'user',text,ts:Date.now()};
+  if(pendingImg){m.img=pendingImg;clearAttach()}
   pushMsg(m);appendMsgEl(m);
   if(curTalk.type==='dm'){
     const c=chars.find(x=>x.id===curTalk.charIds[0]);
@@ -686,7 +741,7 @@ async function routeSpeakers(members){
   const msgs=getMsgs(curTalk.id).slice(-10);
   const transcript=msgs.map(m=>{
     const n=m.role==='user'?userName():(chars.find(c=>c.id===m.charId)||{name:'？'}).name;
-    return n+': '+m.text;
+    return n+': '+(m.text||'（画像）');
   }).join('\n');
   const names=members.map(m=>m.name);
   const prompt=`グループチャットの直近の会話です。次に発言するのが自然なキャラクターを、この中から1〜3人、発言順にJSON配列で答えてください: ${JSON.stringify(names)}\n最後に発言した人以外を優先し、話しかけられた人がいれば必ず含めてください。JSON配列のみを出力してください。\n\n会話:\n${transcript}`;
@@ -703,8 +758,21 @@ async function routeSpeakers(members){
 }
 
 /* ---------- トランスクリプト構築 ---------- */
+function nowStr(){
+  const d=new Date();
+  const days=['日','月','火','水','木','金','土'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function gapStr(ms){
+  const min=Math.round(ms/60000);
+  if(min<60)return `約${min}分`;
+  const h=Math.round(min/60);
+  if(h<48)return `約${h}時間`;
+  return `約${Math.round(h/24)}日`;
+}
 function buildSystem(c){
   let sys=c.os||'';
+  sys+=`\n\n【現在時刻】いまは ${nowStr()}。会話に時間が空いた場合は「（○○経過）」の注記が入る。時間帯や経過を自然に踏まえてよいが、毎回言及する必要はない。`;
   if(curTalk.type==='group'){
     const names=curTalk.charIds.map(id=>(chars.find(x=>x.id===id)||{name:'？'}).name);
     sys+=`\n\n【グループチャット】ここは「${curTalk.name}」というグループチャット。参加者: ${userName()}、${names.join('、')}。あなたは${c.name}として発言する。他の参加者のセリフを代わりに書かない。自分の名前をメッセージの頭に付けない。`;
@@ -715,26 +783,41 @@ function buildSystem(c){
   return sys;
 }
 function buildTranscript(c){
-  const msgs=getMsgs(curTalk.id).slice(-(settings.histLimit||40));
+  const all=getMsgs(curTalk.id).slice(-(settings.histLimit||40));
+  // 画像は直近8メッセージ分だけ実データを送り、それ以前は（画像）表記に
+  const imgCutoff=Math.max(0,all.length-8);
   const blocks=[];
-  for(const m of msgs){
+  let prevTs=null;
+  all.forEach((m,idx)=>{
     const mine=m.role==='char'&&m.charId===c.id;
     const role=mine?'assistant':'user';
-    let text=m.text;
+    let text=m.text||'';
+    if(prevTs&&m.ts-prevTs>=30*60000&&role==='user'){
+      text='（'+gapStr(m.ts-prevTs)+'経過）\n'+text;
+    }
+    prevTs=m.ts;
     if(!mine&&curTalk.type==='group'){
       const n=m.role==='user'?userName():(chars.find(x=>x.id===m.charId)||{name:'？'}).name;
       text=n+': '+text;
     }
-    if(blocks.length&&blocks[blocks.length-1].role===role){
-      blocks[blocks.length-1].content+='\n'+text;
-    }else{
-      blocks.push({role,content:text});
+    const parts=[];
+    if(m.img){
+      if(idx>=imgCutoff&&role==='user')parts.push({t:'img',v:m.img});
+      else text='（画像）'+(text?'\n'+text:'');
     }
-  }
-  if(!blocks.length||blocks[0].role!=='user')blocks.unshift({role:'user',content:'（会話開始）'});
-  if(blocks[blocks.length-1].role!=='user')blocks.push({role:'user',content:'（続けて）'});
+    if(text)parts.push({t:'text',v:text});
+    if(!parts.length)return;
+    if(blocks.length&&blocks[blocks.length-1].role===role){
+      blocks[blocks.length-1].parts.push(...parts);
+    }else{
+      blocks.push({role,parts});
+    }
+  });
+  if(!blocks.length||blocks[0].role!=='user')blocks.unshift({role:'user',parts:[{t:'text',v:'（会話開始）'}]});
+  if(blocks[blocks.length-1].role!=='user')blocks.push({role:'user',parts:[{t:'text',v:'（続けて）'}]});
   return blocks;
 }
+function partsToText(parts){return parts.filter(p=>p.t==='text').map(p=>p.v).join('\n')||'（画像）'}
 
 /* ---------- API呼び出し ---------- */
 async function callModel(c){
@@ -746,9 +829,18 @@ async function callProvider(provider,model,system,messages,maxTokens){
   if(provider==='gemini')return geminiCall(model,system,messages,maxTokens);
   throw new Error('不明なプロバイダー');
 }
+function toAnthropicMsgs(blocks){
+  return blocks.map(b=>{
+    if(typeof b.content==='string')return b;
+    const content=b.parts.map(p=>p.t==='img'
+      ?{type:'image',source:{type:'base64',media_type:'image/jpeg',data:p.v.split(',')[1]}}
+      :{type:'text',text:p.v});
+    return {role:b.role,content};
+  });
+}
 async function anthropicCall(model,system,messages,maxTokens){
   if(!settings.anthropicKey)throw new Error('AnthropicのAPIキーが未設定です');
-  const body={model,max_tokens:maxTokens,messages};
+  const body={model,max_tokens:maxTokens,messages:toAnthropicMsgs(messages)};
   if(system)body.system=system;
   const res=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -762,7 +854,14 @@ async function anthropicCall(model,system,messages,maxTokens){
 }
 async function openaiCall(model,system,messages,maxTokens){
   if(!settings.openaiKey)throw new Error('OpenAIのAPIキーが未設定です');
-  const msgs=system?[{role:'system',content:system},...messages]:messages;
+  const conv=messages.map(b=>{
+    if(typeof b.content==='string')return b;
+    if(b.parts.every(p=>p.t==='text'))return {role:b.role,content:partsToText(b.parts)};
+    return {role:b.role,content:b.parts.map(p=>p.t==='img'
+      ?{type:'image_url',image_url:{url:p.v}}
+      :{type:'text',text:p.v})};
+  });
+  const msgs=system?[{role:'system',content:system},...conv]:conv;
   const res=await fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openaiKey},
@@ -775,7 +874,12 @@ async function openaiCall(model,system,messages,maxTokens){
 }
 async function geminiCall(model,system,messages,maxTokens){
   if(!settings.geminiKey)throw new Error('GeminiのAPIキーが未設定です');
-  const contents=messages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+  const contents=messages.map(b=>{
+    const parts=typeof b.content==='string'?[{text:b.content}]:b.parts.map(p=>p.t==='img'
+      ?{inline_data:{mime_type:'image/jpeg',data:p.v.split(',')[1]}}
+      :{text:p.v});
+    return {role:b.role==='assistant'?'model':'user',parts};
+  });
   const body={contents,generationConfig:{maxOutputTokens:maxTokens}};
   if(system)body.systemInstruction={parts:[{text:system}]};
   const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`,{
