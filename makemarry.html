@@ -231,6 +231,7 @@ img{display:block}
       <div class="field"><label>OpenAI（GPT）</label><input type="password" id="setOpenai" placeholder="sk-..."></div>
       <div class="field"><label>Google（Gemini）</label><input type="password" id="setGemini" placeholder="AIza..."></div>
       <div class="field"><label>xAI（Grok）</label><input type="password" id="setXai" placeholder="xai-..."></div>
+      <div class="field"><label>ElevenLabs（声）</label><input type="password" id="setEleven" placeholder="xi-... または sk_..."></div>
     </div>
     <div class="settsec">
       <div class="sechead">会話</div>
@@ -265,11 +266,12 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.3</div>
+      <div class="note">Makemarry v3.4</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
       <div class="note" id="usageInfo" style="margin-top:8px"></div>
+      <div class="sheetitem" onclick="editPrices()"><span class="si">💴</span>単価と為替レートを編集</div>
       <div class="sheetitem" onclick="resetUsage()"><span class="si">🧮</span>カウンターをリセット</div>
       <div class="note">正確な請求額はAnthropic/OpenAI/Googleの各コンソールで確認できます。ここはアプリからの累計トークン数の目安です（サーバーからの自発トーク分は含みません）。</div>
     </div>
@@ -326,6 +328,26 @@ let chars = LS.get('mm_chars',[]);
 let talks = LS.get('mm_talks',[]);
 let album = LS.get('mm_album',{});
 let usage = LS.get('mm_usage',{});
+// 単価表（$/100万トークン、[入力,出力]）※目安。設定から編集可
+const PRICE_DEFAULTS={
+  'claude-opus-4':[5,25],'claude-fable-5':[10,50],'claude-sonnet-5':[3,15],
+  'claude-sonnet-4':[3,15],'claude-haiku-4-5':[1,5],
+  'gpt-5.6-terra':[2.5,15],'gpt-5.6-luna':[1,6],'gpt-5.6':[5,30],'gpt-5.5':[5,30],'gpt-4o':[2.5,10],
+  'gemini-3.1-pro':[2,12],'gemini-3.1-flash-lite':[0.1,0.4],'gemini-3.5-flash':[0.5,3],
+  'gemini-2.5-pro':[1.25,10],'gemini-2.5-flash':[0.3,2.5],
+  'grok-4-1-fast':[0.2,0.5],'grok-4.3':[2,10],'grok-4.5':[3,15]
+};
+function priceFor(key){
+  if(settings.prices&&settings.prices[key])return settings.prices[key];
+  const hits=Object.keys(PRICE_DEFAULTS).filter(p=>key.includes(p)).sort((a,b)=>b.length-a.length);
+  return hits.length?PRICE_DEFAULTS[hits[0]]:null;
+}
+function jpyRate(){return settings.jpyRate||155}
+function costJpy(key,v){
+  const p=priceFor(key);
+  if(!p)return null;
+  return (v.tin/1e6*p[0]+v.tout/1e6*p[1])*jpyRate();
+}
 function recordUsage(provider,model,tin,tout){
   const k=provider+' / '+model;
   if(!usage[k])usage[k]={calls:0,tin:0,tout:0};
@@ -457,6 +479,7 @@ function openCharEdit(id){
       <select id="ceModelSel" onchange="ceModelSelChange()"></select>
       <input type="text" id="ceModel" value="${c?esc(c.model):''}" placeholder="モデルIDを直接入力" style="margin-top:8px;display:none">
     </div>
+    <div class="field"><label>Voice ID（ElevenLabsの声。空なら読み上げなし）</label><input type="text" id="ceVoice" value="${c&&c.voiceId?esc(c.voiceId):''}" placeholder="例: 21m00Tcm4TlvDq8ikWAM"></div>
     <div class="checkrow"><input type="checkbox" id="ceAuto" ${c&&c.auto?'checked':''}><label for="ceAuto" style="font-size:14px">自発トーク（サーバーから自分で送ってくる）</label></div>
     <div class="field" style="display:flex;gap:10px">
       <div style="flex:1"><label>開始（時）</label><input type="number" id="ceHourStart" value="${c&&c.hourStart!=null?c.hourStart:8}" min="0" max="23"></div>
@@ -531,6 +554,7 @@ function saveChar(id){
   if(!name){toast('名前を入れてください');return}
   const data={
     name, icon:editIcon,
+    voiceId:document.getElementById('ceVoice').value.trim(),
     auto:document.getElementById('ceAuto').checked,
     hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
     hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
@@ -729,9 +753,35 @@ function msgActions(msgId){
   openSheet(`
     <div class="sheettitle">メッセージ</div>
     ${m.role==='user'?`<div class="sheetitem" onclick="editMsg('${msgId}')"><span class="si">✏️</span>編集する</div>`:''}
+    ${(()=>{const mc=m.role==='char'?chars.find(x=>x.id===m.charId):null;return mc&&mc.voiceId&&settings.elevenKey?`<div class="sheetitem" onclick="speakMsg('${msgId}')"><span class="si">🔊</span>声で聴く</div>`:''})()}
     ${isLastChar?`<div class="sheetitem" onclick="regenMsg('${msgId}')"><span class="si">🔄</span>もう一度生成する</div>`:''}
     <div class="sheetitem" onclick="copyMsg('${msgId}')"><span class="si">📋</span>コピー</div>
     <div class="sheetitem" onclick="deleteMsg('${msgId}')" style="color:#C0392B"><span class="si">🗑️</span>このメッセージ以降を削除</div>`);
+}
+let curAudio=null;
+async function speakMsg(id){
+  closeSheet();
+  const m=getMsgs(curTalk.id).find(x=>x.id===id);if(!m)return;
+  const c=chars.find(x=>x.id===m.charId);
+  if(!c||!c.voiceId){toast('Voice IDが未設定です');return}
+  if(!settings.elevenKey){toast('ElevenLabsのキーが未設定です');return}
+  toast(c.name+'の声を生成中…');
+  try{
+    const res=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(c.voiceId),{
+      method:'POST',
+      headers:{'xi-api-key':settings.elevenKey,'Content-Type':'application/json'},
+      body:JSON.stringify({text:m.text,model_id:'eleven_multilingual_v2'})
+    });
+    if(!res.ok){
+      let msg='HTTP '+res.status;
+      try{const d=await res.json();msg=d.detail?(d.detail.message||JSON.stringify(d.detail)):msg}catch(e){}
+      throw new Error(msg);
+    }
+    const blob=await res.blob();
+    if(curAudio){curAudio.pause()}
+    curAudio=new Audio(URL.createObjectURL(blob));
+    curAudio.play();
+  }catch(e){showError(e)}
 }
 function copyMsg(id){
   const m=getMsgs(curTalk.id).find(x=>x.id===id);
@@ -1136,6 +1186,7 @@ function renderSettings(){
   document.getElementById('setOpenai').value=settings.openaiKey||'';
   document.getElementById('setGemini').value=settings.geminiKey||'';
   document.getElementById('setXai').value=settings.xaiKey||'';
+  document.getElementById('setEleven').value=settings.elevenKey||'';
   document.getElementById('setUserName').value=settings.userName||'';
   document.getElementById('setServerUrl').value=settings.serverUrl||'';
   document.getElementById('setServerToken').value=settings.serverToken||'';
@@ -1148,11 +1199,49 @@ function renderSettings(){
     document.getElementById('storageInfo').textContent=`使用中: 約${(bytes/1024).toFixed(0)}KB（localStorageの上限は約5MB。写真は自動で縮小して保存します）`;
   }catch(e){}
   const u=Object.entries(usage).filter(([k])=>k!=='_last');
-  document.getElementById('usageInfo').innerHTML=u.length
-    ? u.map(([k,v])=>esc(k)+'：'+v.calls+'回 / 入力'+(v.tin/1000).toFixed(1)+'k / 出力'+(v.tout/1000).toFixed(1)+'k tok').join('<br>')
-      +(usage._last?'<br><br>直近の1通：入力'+usage._last.tin+' / 出力'+usage._last.tout+' tok':'')
-    : 'まだ記録がありません';
+  const fmtYen=(c)=>c<1?c.toFixed(2)+'円':'約'+Math.round(c).toLocaleString()+'円';
+  let total=0,hasUnknown=false,html='';
+  if(!u.length){html='まだ記録がありません';}
+  else{
+    html=u.map(([k,v])=>{
+      const c=costJpy(k,v);
+      if(c==null){hasUnknown=true;}else{total+=c;}
+      const yen=c!=null?' / <b>'+fmtYen(c)+'</b>':' / 単価未設定';
+      return esc(k)+'：'+v.calls+'回'+yen+'<br><span style="font-size:11px">　入力'+(v.tin/1000).toFixed(1)+'k・出力'+(v.tout/1000).toFixed(1)+'k tok</span>';
+    }).join('<br>');
+    html+='<br><br><b>合計：'+fmtYen(total)+'</b>'+(hasUnknown?'（単価未設定分を除く）':'');
+    if(usage._last){
+      const lc=costJpy(usage._last.k,{tin:usage._last.tin,tout:usage._last.tout});
+      html+='<br>直近の1通：'+(lc!=null?fmtYen(lc):usage._last.tin+'/'+usage._last.tout+' tok');
+    }
+  }
+  document.getElementById('usageInfo').innerHTML=html;
   updatePwaStatus();
+}
+function editPrices(){
+  const keys=Object.keys(usage).filter(k=>k!=='_last');
+  openSheet(`
+    <div class="sheettitle">💴 単価の編集</div>
+    <div class="note" style="margin-bottom:10px">単位：ドル/100万トークン。初期値は2026年7月時点の公式価格の目安です。</div>
+    <div class="field"><label>為替レート（円/ドル）</label><input type="number" id="prRate" value="${jpyRate()}" step="1"></div>
+    ${keys.map((k,i)=>{
+      const p=priceFor(k)||[0,0];
+      return `<div class="field"><label>${esc(k)}</label>
+        <div style="display:flex;gap:10px">
+          <input type="number" id="prIn${i}" value="${p[0]}" step="0.1" placeholder="入力$">
+          <input type="number" id="prOut${i}" value="${p[1]}" step="0.1" placeholder="出力$">
+        </div></div>`;
+    }).join('')||'<div class="note">まだ使用記録がありません。使うとここにモデルが並びます。</div>'}
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="savePrices(${JSON.stringify(keys).replace(/"/g,'&quot;')})">保存</button></div>`);
+}
+function savePrices(keys){
+  settings.jpyRate=parseFloat(document.getElementById('prRate').value)||155;
+  if(!settings.prices)settings.prices={};
+  keys.forEach((k,i)=>{
+    settings.prices[k]=[parseFloat(document.getElementById('prIn'+i).value)||0,parseFloat(document.getElementById('prOut'+i).value)||0];
+  });
+  LS.set('mm_settings',settings);
+  closeSheet();renderSettings();toast('保存しました');
 }
 function resetUsage(){
   if(!confirm('使用量カウンターをリセットしますか？'))return;
@@ -1164,6 +1253,7 @@ function saveSettings(){
     openaiKey:document.getElementById('setOpenai').value.trim(),
     geminiKey:document.getElementById('setGemini').value.trim(),
     xaiKey:document.getElementById('setXai').value.trim(),
+    elevenKey:document.getElementById('setEleven').value.trim(),
     userName:document.getElementById('setUserName').value.trim(),
     serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
     serverToken:document.getElementById('setServerToken').value.trim(),
@@ -1502,8 +1592,17 @@ async function syncConfig(){
         minGapHours:3
       }))
     };
+    cfg.shared={
+      updated:new Date().toISOString(),
+      userName:userName(),
+      events:eventsForPrompt(),
+      chars:chars.map(c=>{
+        const rooms=talks.filter(t=>t.type==='dm'&&t.charIds[0]===c.id).sort((a,b)=>(b.lastTs||0)-(a.lastTs||0));
+        return {name:c.name,memory:(rooms[0]&&rooms[0].memory)||'',album:(album[c.id]||[]).slice(-5).map(e=>e.text)};
+      })
+    };
     const r=await serverFetch('/config',{method:'POST',body:JSON.stringify(cfg)});
-    toast('同期しました（'+r.chars+'キャラ）');
+    toast('同期しました（'+r.chars+'キャラ・共有データ込み）');
   }catch(e){showError(e)}
 }
 async function serverTestPush(){
