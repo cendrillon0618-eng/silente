@@ -223,7 +223,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v2.0</div>
+      <div class="note">Makemarry v2.0.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -1063,7 +1063,7 @@ function importBackup(inp){
     try{
       const dump=JSON.parse(r.result);
       Object.entries(dump).forEach(([k,v])=>{if(k.startsWith('mm_'))localStorage.setItem(k,v)});
-      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);
+      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;
       renderTalks();renderChars();renderSettings();
       toast('読み込みました');
     }catch(e){toast('読み込みに失敗しました')}
