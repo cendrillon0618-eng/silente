@@ -120,6 +120,9 @@ img{display:block}
 .evcm{display:flex;gap:7px;margin-top:8px;align-items:flex-start}
 .evcm .avatar{width:22px;height:22px;font-size:11px;flex-shrink:0;margin-top:1px}
 .evcm .cb{background:var(--bg);border-radius:3px 12px 12px 12px;padding:6px 10px;font-size:12.5px;line-height:1.6;color:var(--ink)}
+.vplay{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 1px 3px rgba(43,39,51,.15);
+  font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;align-self:center}
+.vplay:active{background:var(--accent-soft)}
 #inputbar{
   background:var(--surface);border-top:1px solid var(--line);
   padding:8px 10px calc(8px + var(--sab));display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
@@ -232,6 +235,7 @@ img{display:block}
       <div class="field"><label>Google（Gemini）</label><input type="password" id="setGemini" placeholder="AIza..."></div>
       <div class="field"><label>xAI（Grok）</label><input type="password" id="setXai" placeholder="xai-..."></div>
       <div class="field"><label>ElevenLabs（声）</label><input type="password" id="setEleven" placeholder="xi-... または sk_..."></div>
+      <div class="checkrow"><input type="checkbox" id="setVoiceOn" checked><label for="setVoiceOn" style="font-size:14px">声の読み上げ機能を使う（吹き出しに🔊が出ます）</label></div>
     </div>
     <div class="settsec">
       <div class="sechead">会話</div>
@@ -266,7 +270,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.4</div>
+      <div class="note">Makemarry v3.5</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -712,12 +716,14 @@ function msgHtml(m){
   }
   const c=chars.find(x=>x.id===m.charId);
   const showName=curTalk.type==='group';
+  const vbtn=voiceActive(c)?`<button class="vplay" onclick="event.stopPropagation();playVoice('${m.id}')">🔊</button>`:'';
   return `<div class="msgline" onclick="msgActions('${m.id}')">
     ${avatarHtml(c||{name:'？'},'avatar sm')}
     <div class="msgcol">
       ${showName?`<div class="msgname">${esc(c?c.name:'？')}</div>`:''}
       <div class="${bcls}">${body}</div>
     </div>
+    ${vbtn}
     <span class="msgtime">${fmtTime(m.ts)}</span></div>`;
 }
 function appendMsgEl(m){
@@ -753,34 +759,59 @@ function msgActions(msgId){
   openSheet(`
     <div class="sheettitle">メッセージ</div>
     ${m.role==='user'?`<div class="sheetitem" onclick="editMsg('${msgId}')"><span class="si">✏️</span>編集する</div>`:''}
-    ${(()=>{const mc=m.role==='char'?chars.find(x=>x.id===m.charId):null;return mc&&mc.voiceId&&settings.elevenKey?`<div class="sheetitem" onclick="speakMsg('${msgId}')"><span class="si">🔊</span>声で聴く</div>`:''})()}
+    ${(()=>{const mc=m.role==='char'?chars.find(x=>x.id===m.charId):null;if(!(mc&&mc.voiceId&&settings.elevenKey))return '';return `<div class="sheetitem" onclick="speakMsg('${msgId}')"><span class="si">🔊</span>声で聴く</div><div class="sheetitem" onclick="saveVoiceMp3('${msgId}')"><span class="si">💾</span>音声をmp3で保存</div>`})()}
     ${isLastChar?`<div class="sheetitem" onclick="regenMsg('${msgId}')"><span class="si">🔄</span>もう一度生成する</div>`:''}
     <div class="sheetitem" onclick="copyMsg('${msgId}')"><span class="si">📋</span>コピー</div>
     <div class="sheetitem" onclick="deleteMsg('${msgId}')" style="color:#C0392B"><span class="si">🗑️</span>このメッセージ以降を削除</div>`);
 }
 let curAudio=null;
-async function speakMsg(id){
-  closeSheet();
+const voiceCache={};
+function voiceActive(c){
+  return settings.voiceOn!==false && settings.elevenKey && c && c.voiceId
+    && (!curTalk||curTalk.voiceMute!==true);
+}
+async function getVoiceBlob(m,c){
+  if(voiceCache[m.id])return voiceCache[m.id];
+  toast(c.name+'の声を生成中…');
+  const res=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(c.voiceId),{
+    method:'POST',
+    headers:{'xi-api-key':settings.elevenKey,'Content-Type':'application/json'},
+    body:JSON.stringify({text:m.text,model_id:'eleven_multilingual_v2'})
+  });
+  if(!res.ok){
+    let msg='HTTP '+res.status;
+    try{const d=await res.json();msg=d.detail?(d.detail.message||JSON.stringify(d.detail)):msg}catch(e){}
+    throw new Error(msg);
+  }
+  const blob=await res.blob();
+  voiceCache[m.id]=blob;
+  return blob;
+}
+async function playVoice(id){
   const m=getMsgs(curTalk.id).find(x=>x.id===id);if(!m)return;
   const c=chars.find(x=>x.id===m.charId);
   if(!c||!c.voiceId){toast('Voice IDが未設定です');return}
   if(!settings.elevenKey){toast('ElevenLabsのキーが未設定です');return}
-  toast(c.name+'の声を生成中…');
   try{
-    const res=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(c.voiceId),{
-      method:'POST',
-      headers:{'xi-api-key':settings.elevenKey,'Content-Type':'application/json'},
-      body:JSON.stringify({text:m.text,model_id:'eleven_multilingual_v2'})
-    });
-    if(!res.ok){
-      let msg='HTTP '+res.status;
-      try{const d=await res.json();msg=d.detail?(d.detail.message||JSON.stringify(d.detail)):msg}catch(e){}
-      throw new Error(msg);
-    }
-    const blob=await res.blob();
-    if(curAudio){curAudio.pause()}
+    const blob=await getVoiceBlob(m,c);
+    if(curAudio)curAudio.pause();
     curAudio=new Audio(URL.createObjectURL(blob));
     curAudio.play();
+  }catch(e){showError(e)}
+}
+async function speakMsg(id){closeSheet();playVoice(id)}
+async function saveVoiceMp3(id){
+  closeSheet();
+  const m=getMsgs(curTalk.id).find(x=>x.id===id);if(!m)return;
+  const c=chars.find(x=>x.id===m.charId);if(!c)return;
+  try{
+    const blob=await getVoiceBlob(m,c);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    const d=new Date(m.ts);
+    a.download=c.name+'_'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'.mp3';
+    a.click();
+    toast('mp3を保存しました');
   }catch(e){showError(e)}
 }
 function copyMsg(id){
@@ -821,6 +852,12 @@ function regenMsg(id){
   msgs=msgs.slice(0,i);saveMsgs(curTalk.id,msgs);
   closeSheet();renderMsgs();
   generateFor(chars.find(c=>c.id===charId));
+}
+
+function toggleTalkVoice(){
+  curTalk.voiceMute=!curTalk.voiceMute;
+  saveTalks();closeSheet();renderMsgs(true);
+  toast(curTalk.voiceMute?'このトークの声をOFFにしました':'このトークの声をONにしました');
 }
 
 /* ---------- 記憶ノート・思い出生成 ---------- */
@@ -887,6 +924,7 @@ function writeAlbumFromChat(){
 function openChatMenu(){
   openSheet(`
     <div class="sheettitle">${esc(talkDisplay(curTalk).name)}</div>
+    <div class="sheetitem" onclick="toggleTalkVoice()"><span class="si">🔊</span>このトークの声：${curTalk.voiceMute?'OFF（タップでON）':'ON（タップでOFF）'}</div>
     <div class="sheetitem" onclick="openMemorySheet()"><span class="si">🧠</span>記憶ノート</div>
     <div class="sheetitem" onclick="writeAlbumFromChat()"><span class="si">📖</span>思い出を書いてもらう</div>
     <div class="sheetitem" onclick="openWallpaperPick()"><span class="si">🖼️</span>壁紙を変える</div>
@@ -1187,6 +1225,7 @@ function renderSettings(){
   document.getElementById('setGemini').value=settings.geminiKey||'';
   document.getElementById('setXai').value=settings.xaiKey||'';
   document.getElementById('setEleven').value=settings.elevenKey||'';
+  document.getElementById('setVoiceOn').checked=settings.voiceOn!==false;
   document.getElementById('setUserName').value=settings.userName||'';
   document.getElementById('setServerUrl').value=settings.serverUrl||'';
   document.getElementById('setServerToken').value=settings.serverToken||'';
@@ -1254,6 +1293,7 @@ function saveSettings(){
     geminiKey:document.getElementById('setGemini').value.trim(),
     xaiKey:document.getElementById('setXai').value.trim(),
     elevenKey:document.getElementById('setEleven').value.trim(),
+    voiceOn:document.getElementById('setVoiceOn').checked,
     userName:document.getElementById('setUserName').value.trim(),
     serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
     serverToken:document.getElementById('setServerToken').value.trim(),
