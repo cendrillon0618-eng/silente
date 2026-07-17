@@ -233,7 +233,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.0</div>
+      <div class="note">Makemarry v3.0.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -1297,9 +1297,11 @@ async function checkInbox(){
     const r=await serverFetch('/inbox?clear=1');
     if(!r.messages||!r.messages.length)return;
     for(const m of r.messages){
-      const c=chars.find(x=>x.name===m.char);
-      if(!c)continue;
-      let t=talks.find(x=>x.type==='dm'&&x.charIds[0]===c.id);
+      const norm=s=>(s||'').trim().normalize('NFC');
+      const c=chars.find(x=>norm(x.name)===norm(m.char));
+      if(!c){toast('受信したが振り分け失敗: '+m.char+'（キャラ名が一致しません）');continue}
+      const rooms=talks.filter(x=>x.type==='dm'&&x.charIds[0]===c.id).sort((a,b)=>(b.lastTs||0)-(a.lastTs||0));
+      let t=rooms[0];
       if(!t){t={id:uid(),type:'dm',charIds:[c.id],title:'',memory:'',wallpaper:{type:'preset',value:'yoi'},lastTs:0,lastPreview:'',unread:0};talks.push(t)}
       const msgs=getMsgs(t.id);
       msgs.push({id:uid(),role:'char',charId:c.id,text:m.text,ts:m.ts||Date.now()});
