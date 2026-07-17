@@ -105,6 +105,21 @@ img{display:block}
 .memcard .mt{font-size:14px;line-height:1.8;white-space:pre-wrap}
 .loadmore{display:block;margin:4px auto 14px;padding:7px 18px;border-radius:16px;background:rgba(255,255,255,.85);
   font-size:12px;color:var(--accent-deep);font-weight:600;box-shadow:0 1px 3px rgba(43,39,51,.1)}
+.monthhead{font-family:Georgia,serif;font-style:italic;font-size:15px;color:var(--accent-deep);padding:16px 18px 8px;letter-spacing:.5px}
+.evcard{background:var(--surface);border-radius:16px;margin:0 14px 12px;padding:13px 14px;box-shadow:0 1px 3px rgba(43,39,51,.07);display:flex;gap:12px}
+.evcard.past{opacity:.55}
+.evdate{width:46px;flex-shrink:0;text-align:center;background:var(--accent-soft);border-radius:12px;padding:7px 0 6px;height:fit-content}
+.evdate .dd{font-size:19px;font-weight:800;color:var(--accent-deep);line-height:1.1}
+.evdate .dw{font-size:10px;color:var(--accent-deep);font-weight:600}
+.evdate.today{background:var(--accent)}
+.evdate.today .dd,.evdate.today .dw{color:#fff}
+.evbody{flex:1;min-width:0}
+.evtitle{font-size:15px;font-weight:700;line-height:1.4}
+.evmeta{font-size:11px;color:var(--sub);margin-top:2px;display:flex;gap:8px;align-items:center}
+.evsoon{background:var(--accent);color:#fff;border-radius:8px;padding:1px 7px;font-size:10px;font-weight:700}
+.evcm{display:flex;gap:7px;margin-top:8px;align-items:flex-start}
+.evcm .avatar{width:22px;height:22px;font-size:11px;flex-shrink:0;margin-top:1px}
+.evcm .cb{background:var(--bg);border-radius:3px 12px 12px 12px;padding:6px 10px;font-size:12.5px;line-height:1.6;color:var(--ink)}
 #inputbar{
   background:var(--surface);border-top:1px solid var(--line);
   padding:8px 10px calc(8px + var(--sab));display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
@@ -171,7 +186,7 @@ img{display:block}
 
 <!-- ========== トーク ========== -->
 <div class="screen active" id="scr-talks">
-  <div class="appbar"><span class="wordmark">Makemarry</span><span class="spacer"></span></div>
+  <div class="appbar"><span class="wordmark">Makemarry</span><span class="spacer"></span><button class="iconbtn" onclick="switchTab('schedule')">📅</button></div>
   <div class="screenwrap">
     <div class="list" id="talkList"></div>
     <button class="fab" onclick="openNewTalk()">＋</button>
@@ -197,6 +212,15 @@ img{display:block}
   </div>
 </div>
 
+<!-- ========== 予定 ========== -->
+<div class="screen" id="scr-schedule">
+  <div class="appbar"><span style="font-size:17px;font-weight:700">大事な予定</span><span class="spacer"></span></div>
+  <div class="screenwrap">
+    <div class="list" id="scheduleList"></div>
+    <button class="fab" onclick="editEvent(null)">＋</button>
+  </div>
+</div>
+
 <!-- ========== 設定 ========== -->
 <div class="screen" id="scr-settings">
   <div class="appbar"><span style="font-size:17px;font-weight:700">設定</span><span class="spacer"></span></div>
@@ -210,6 +234,13 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">会話</div>
       <div class="field"><label>あなたの名前（グルチャでの表示・キャラへの伝達に使用）</label><input type="text" id="setUserName" placeholder="かのん"></div>
+      <div class="field"><label>フォント</label>
+        <select id="setFont">
+          <option value="gothic">ゴシック（標準）</option>
+          <option value="mincho">明朝</option>
+          <option value="maru">丸ゴシック</option>
+        </select>
+      </div>
       <div class="checkrow"><input type="checkbox" id="setShortStyle" checked><label for="setShortStyle" style="font-size:14px">チャットらしい短文口調をキャラに指示する</label></div>
       <div class="field"><label>最大応答トークン</label><input type="number" id="setMaxTokens" value="1024"></div>
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
@@ -233,7 +264,13 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.0.1</div>
+      <div class="note">Makemarry v3.2</div>
+    </div>
+    <div class="settsec">
+      <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
+      <div class="note" id="usageInfo" style="margin-top:8px"></div>
+      <div class="sheetitem" onclick="resetUsage()"><span class="si">🧮</span>カウンターをリセット</div>
+      <div class="note">正確な請求額はAnthropic/OpenAI/Googleの各コンソールで確認できます。ここはアプリからの累計トークン数の目安です（サーバーからの自発トーク分は含みません）。</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -250,6 +287,7 @@ img{display:block}
   <button class="tab on" data-scr="talks" onclick="switchTab('talks')"><span class="ti">💬</span>トーク</button>
   <button class="tab" data-scr="chars" onclick="switchTab('chars')"><span class="ti">👥</span>キャラ</button>
   <button class="tab" data-scr="album" onclick="switchTab('album')"><span class="ti">📖</span>思い出</button>
+  <button class="tab" data-scr="schedule" onclick="switchTab('schedule')"><span class="ti">📅</span>予定</button>
   <button class="tab" data-scr="settings" onclick="switchTab('settings')"><span class="ti">⚙️</span>設定</button>
 </div>
 
@@ -286,6 +324,14 @@ const LS = {
 let chars = LS.get('mm_chars',[]);
 let talks = LS.get('mm_talks',[]);
 let album = LS.get('mm_album',{});
+let usage = LS.get('mm_usage',{});
+function recordUsage(provider,model,tin,tout){
+  const k=provider+' / '+model;
+  if(!usage[k])usage[k]={calls:0,tin:0,tout:0};
+  usage[k].calls++;usage[k].tin+=tin||0;usage[k].tout+=tout||0;
+  usage._last={k,tin:tin||0,tout:tout||0};
+  LS.set('mm_usage',usage);
+}
 const saveAlbum=()=>LS.set('mm_album',album);
 let settings = LS.get('mm_settings',{anthropicKey:'',openaiKey:'',geminiKey:'',userName:'',shortStyle:true,maxTokens:1024,histLimit:40});
 const saveChars=()=>LS.set('mm_chars',chars);
@@ -331,7 +377,7 @@ function switchTab(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('scr-'+name).classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.scr===name));
-  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings(); if(name==='album')renderAlbum();
+  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings(); if(name==='album')renderAlbum(); if(name==='schedule')renderSchedule();
 }
 function openSheet(html,center){
   const o=document.getElementById('ovl');
@@ -370,13 +416,21 @@ function renderChars(){
   const el=document.getElementById('charList');
   if(!chars.length){el.innerHTML='<div class="empty">まだキャラがいません。<br>＋ から最初のひとりを迎えてください。</div>';return}
   el.innerHTML=chars.map(c=>`
-    <div class="row" onclick="openCharEdit('${c.id}')">
+    <div class="row" onclick="charRowMenu('${c.id}')">
       ${avatarHtml(c)}
       <div class="rowbody">
         <div class="rowname">${esc(c.name)}</div>
         <div class="rowsub">${esc(c.provider)} / ${esc(c.model)}</div>
       </div>
     </div>`).join('');
+}
+function charRowMenu(id){
+  const c=chars.find(x=>x.id===id);if(!c)return;
+  openSheet(`
+    <div class="sheettitle">${esc(c.name)}</div>
+    <div class="sheetitem" onclick="closeSheet();startDM('${id}')"><span class="si">💬</span>トークする</div>
+    <div class="sheetitem" onclick="openCharEdit('${id}')"><span class="si">⚙️</span>設定を見る・編集する</div>
+    <div class="sheetitem" onclick="albumSel='${id}';closeSheet();switchTab('album')"><span class="si">📖</span>思い出を見る</div>`);
 }
 let editIcon=null;
 function openCharEdit(id){
@@ -917,6 +971,8 @@ function buildSystem(c){
   if(curTalk.memory)sys+=`\n\n【記憶（これまでの経緯・自分でまとめたもの）】\n${curTalk.memory}`;
   const mem=(album[c.id]||[]).slice(-10).map(e=>'・'+e.text).join('\n');
   if(mem)sys+=`\n\n【思い出（自分で残した大切な記録）】\n${mem}`;
+  const ev=eventsForPrompt();
+  if(ev)sys+=`\n\n【${userName()}とのこれからの予定】\n${ev}`;
   sys+=`\n\n【現在時刻】いまは ${nowStr()}。会話に時間が空いた場合は「（○○経過）」の注記が入る。時間帯や経過を自然に踏まえてよいが、毎回言及する必要はない。`;
   if(curTalk.type==='group'){
     const names=curTalk.charIds.map(id=>(chars.find(x=>x.id===id)||{name:'？'}).name);
@@ -995,6 +1051,7 @@ async function anthropicCall(model,system,messages,maxTokens){
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  if(data.usage)recordUsage('Claude',model,data.usage.input_tokens,data.usage.output_tokens);
   return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
 }
 async function openaiCall(model,system,messages,maxTokens){
@@ -1014,6 +1071,7 @@ async function openaiCall(model,system,messages,maxTokens){
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  if(data.usage)recordUsage('GPT',model,data.usage.prompt_tokens,data.usage.completion_tokens);
   if(!data.choices||!data.choices[0])throw new Error('OpenAI応答が不正: '+JSON.stringify(data).slice(0,200));
   return data.choices[0].message.content.trim();
 }
@@ -1032,6 +1090,7 @@ async function geminiCall(model,system,messages,maxTokens){
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
+  if(data.usageMetadata)recordUsage('Gemini',model,data.usageMetadata.promptTokenCount,data.usageMetadata.candidatesTokenCount);
   if(!data.candidates||!data.candidates[0])throw new Error('Gemini応答が不正: '+JSON.stringify(data).slice(0,200));
   return data.candidates[0].content.parts.map(p=>p.text).join('').trim();
 }
@@ -1044,6 +1103,7 @@ function renderSettings(){
   document.getElementById('setUserName').value=settings.userName||'';
   document.getElementById('setServerUrl').value=settings.serverUrl||'';
   document.getElementById('setServerToken').value=settings.serverToken||'';
+  document.getElementById('setFont').value=settings.font||'gothic';
   document.getElementById('setShortStyle').checked=settings.shortStyle!==false;
   document.getElementById('setMaxTokens').value=settings.maxTokens||1024;
   document.getElementById('setHistLimit').value=settings.histLimit||40;
@@ -1051,7 +1111,16 @@ function renderSettings(){
     let bytes=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('mm_'))bytes+=(localStorage.getItem(k)||'').length*2}
     document.getElementById('storageInfo').textContent=`使用中: 約${(bytes/1024).toFixed(0)}KB（localStorageの上限は約5MB。写真は自動で縮小して保存します）`;
   }catch(e){}
+  const u=Object.entries(usage).filter(([k])=>k!=='_last');
+  document.getElementById('usageInfo').innerHTML=u.length
+    ? u.map(([k,v])=>esc(k)+'：'+v.calls+'回 / 入力'+(v.tin/1000).toFixed(1)+'k / 出力'+(v.tout/1000).toFixed(1)+'k tok').join('<br>')
+      +(usage._last?'<br><br>直近の1通：入力'+usage._last.tin+' / 出力'+usage._last.tout+' tok':'')
+    : 'まだ記録がありません';
   updatePwaStatus();
+}
+function resetUsage(){
+  if(!confirm('使用量カウンターをリセットしますか？'))return;
+  usage={};LS.set('mm_usage',usage);renderSettings();
 }
 function saveSettings(){
   settings={
@@ -1061,12 +1130,21 @@ function saveSettings(){
     userName:document.getElementById('setUserName').value.trim(),
     serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
     serverToken:document.getElementById('setServerToken').value.trim(),
+    font:document.getElementById('setFont').value,
     shortStyle:document.getElementById('setShortStyle').checked,
     maxTokens:parseInt(document.getElementById('setMaxTokens').value)||1024,
     histLimit:parseInt(document.getElementById('setHistLimit').value)||40
   };
   LS.set('mm_settings',settings);
+  applyFont();
   toast('設定を保存しました');
+}
+function applyFont(){
+  const f=settings.font||'gothic';
+  document.body.style.fontFamily=
+    f==='mincho'?'"Hiragino Mincho ProN","Yu Mincho",serif'
+    :f==='maru'?'"Hiragino Maru Gothic ProN","Yu Gothic",sans-serif'
+    :'-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif';
 }
 
 /* ================= バックアップ ================= */
@@ -1087,13 +1165,134 @@ function importBackup(inp){
     try{
       const dump=JSON.parse(r.result);
       Object.entries(dump).forEach(([k,v])=>{if(k.startsWith('mm_'))localStorage.setItem(k,v)});
-      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;
+      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;events=LS.get('mm_events',[]);usage=LS.get('mm_usage',{});
       renderTalks();renderChars();renderSettings();
       toast('読み込みました');
     }catch(e){toast('読み込みに失敗しました')}
   };
   r.readAsText(f);
   inp.value='';
+}
+
+/* ================= 予定表 ================= */
+let events = LS.get('mm_events',[]);
+// 旧形式(comment単数)から新形式(comments配列)へ移行
+events.forEach(e=>{
+  if(e.comment&&!e.comments){e.comments=[{by:e.commentBy||'',text:e.comment}];delete e.comment;delete e.commentBy}
+  if(!e.comments)e.comments=[];
+});
+const saveEvents=()=>LS.set('mm_events',events);
+function dayStart(){const d=new Date();d.setHours(0,0,0,0);return d.getTime()}
+function upcomingEvents(days){
+  const t0=dayStart(),limit=t0+(days||30)*86400000;
+  return events.filter(e=>{const t=new Date(e.date+'T00:00').getTime();return t>=t0&&t<=limit})
+    .sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+}
+let showPast=false;
+function renderSchedule(){
+  const el=document.getElementById('scheduleList');
+  const t0=dayStart();
+  const fut=events.filter(e=>new Date(e.date+'T00:00').getTime()>=t0)
+    .sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const past=events.filter(e=>new Date(e.date+'T00:00').getTime()<t0)
+    .sort((a,b)=>(b.date+(b.time||'')).localeCompare(a.date+(a.time||'')));
+  if(!events.length){
+    el.innerHTML='<div class="empty">まだ予定がありません。<br>＋ から最初の予定を入れてください。</div>';return;
+  }
+  let html='',curMonth='';
+  const days=['日','月','火','水','木','金','土'];
+  for(const e of fut){
+    const d=new Date(e.date+'T00:00');
+    const mkey=d.getFullYear()+'年'+(d.getMonth()+1)+'月';
+    if(mkey!==curMonth){curMonth=mkey;html+=`<div class="monthhead">${mkey}</div>`}
+    const diff=Math.round((d.getTime()-t0)/86400000);
+    const soon=diff===0?'今日！':diff===1?'明日':diff<=7?`あと${diff}日`:'';
+    html+=`<div class="evcard" onclick="editEvent('${e.id}')">
+      <div class="evdate ${diff===0?'today':''}"><div class="dd">${d.getDate()}</div><div class="dw">${days[d.getDay()]}</div></div>
+      <div class="evbody">
+        <div class="evtitle">${esc(e.title)}</div>
+        <div class="evmeta">${e.time?'🕐 '+esc(e.time):''}${soon?`<span class="evsoon">${soon}</span>`:''}</div>
+        ${(e.comments||[]).map(cm=>{
+          const c=chars.find(x=>x.name===cm.by);
+          return `<div class="evcm">${avatarHtml(c||{name:cm.by},'avatar')}<div class="cb">${esc(cm.text)}</div></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+  if(past.length){
+    html+=`<button class="loadmore" onclick="showPast=!showPast;renderSchedule()">${showPast?'過去の予定を隠す':'過去の予定を見る（'+past.length+'件）'}</button>`;
+    if(showPast){
+      curMonth='';
+      for(const e of past){
+        const d=new Date(e.date+'T00:00');
+        const mkey=d.getFullYear()+'年'+(d.getMonth()+1)+'月';
+        if(mkey!==curMonth){curMonth=mkey;html+=`<div class="monthhead">${mkey}</div>`}
+        html+=`<div class="evcard past" onclick="editEvent('${e.id}')">
+          <div class="evdate"><div class="dd">${d.getDate()}</div><div class="dw">${days[d.getDay()]}</div></div>
+          <div class="evbody"><div class="evtitle">${esc(e.title)}</div>
+          ${(e.comments||[]).map(cm=>{
+            const c=chars.find(x=>x.name===cm.by);
+            return `<div class="evcm">${avatarHtml(c||{name:cm.by},'avatar')}<div class="cb">${esc(cm.text)}</div></div>`;
+          }).join('')}</div></div>`;
+      }
+    }
+  }
+  el.innerHTML=html;
+}
+function editEvent(id){
+  const e=id?events.find(x=>x.id===id):null;
+  openSheet(`
+    <div class="sheettitle">${e?'予定を編集':'予定を追加'}</div>
+    <div class="field" style="display:flex;gap:10px">
+      <div style="flex:1.2"><label>日付</label><input type="date" id="evDate" value="${e?e.date:''}"></div>
+      <div style="flex:1"><label>時間（任意）</label><input type="time" id="evTime" value="${e&&e.time?e.time:''}"></div>
+    </div>
+    <div class="field"><label>予定</label><input type="text" id="evTitle" value="${e?esc(e.title):''}" placeholder="例：指輪を見に行く"></div>
+    <div class="btnrow" style="margin-bottom:10px">
+      ${e?`<button class="btn ghost" onclick="eventComment('${e.id}')">💬 キャラから一言もらう</button>`:''}
+    </div>
+    <div class="btnrow">
+      ${e?`<button class="btn danger" onclick="deleteEvent('${e.id}')">削除</button>`:''}
+      <button class="btn ghost" onclick="closeSheet()">閉じる</button>
+      <button class="btn" onclick="saveEvent('${e?e.id:''}')">保存</button>
+    </div>`);
+}
+function saveEvent(id){
+  const date=document.getElementById('evDate').value;
+  const time=document.getElementById('evTime').value;
+  const title=document.getElementById('evTitle').value.trim();
+  if(!date||!title){toast('日付と予定を入れてください');return}
+  if(id){const e=events.find(x=>x.id===id);Object.assign(e,{date,time,title})}
+  else{events.push({id:uid(),date,time,title,comments:[]})}
+  saveEvents();closeSheet();renderSchedule();toast('保存しました');
+}
+function deleteEvent(id){
+  if(!confirm('この予定を削除しますか？'))return;
+  events=events.filter(x=>x.id!==id);saveEvents();closeSheet();renderSchedule();
+}
+function eventComment(id){
+  const e=events.find(x=>x.id===id);if(!e)return;
+  if(!chars.length){toast('キャラがいません');return}
+  window._evCb=async(c)=>{
+    closeSheet();toast(c.name+'が一言書いています…');
+    const others=(e.comments||[]).map(cm=>cm.by+'「'+cm.text+'」').join('\n');
+    const prompt=`予定：${e.date}${e.time?' '+e.time:''}「${e.title}」\n`+
+      (others?`他のみんなの一言：\n${others}\n`:'')+
+      `この${userName()}との予定について、あなた（${c.name}）からの一言メッセージを書いて（1〜2文、前置きなし）。`;
+    try{
+      const text=await callProvider(c.provider,c.model,c.os||'',[{role:'user',content:prompt}],200);
+      if(!e.comments)e.comments=[];
+      e.comments.push({by:c.name,text:text.trim()});
+      saveEvents();renderSchedule();toast('一言もらいました');
+    }catch(err){showError(err)}
+  };
+  openSheet(`<div class="sheettitle">誰に一言もらう？</div>`+chars.map((c,i)=>
+    `<div class="sheetitem" onclick="window._evCb(chars[${i}])">${avatarHtml(c,'avatar sm')}${esc(c.name)}</div>`).join(''));
+}
+function eventsForPrompt(){
+  const list=upcomingEvents(14);
+  if(!list.length)return '';
+  return list.map(e=>`・${e.date}${e.time?' '+e.time:''}：${e.title}`).join('\n');
 }
 
 /* ================= 思い出アルバム ================= */
@@ -1257,7 +1456,7 @@ async function syncConfig(){
         name:c.name,
         model:c.provider==='anthropic'?c.model:'claude-sonnet-4-6',
         os:c.os||'',
-        memo:(album[c.id]||[]).slice(-5).map(e=>'・'+e.text).join('\n'),
+        memo:((album[c.id]||[]).slice(-5).map(e=>'・'+e.text).join('\n')+(eventsForPrompt()?'\n【これからの予定】\n'+eventsForPrompt():'')).trim(),
         auto:!!c.auto,
         hourStart:c.hourStart!=null?c.hourStart:8,
         hourEnd:c.hourEnd!=null?c.hourEnd:23,
@@ -1319,6 +1518,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkInbox
 setInterval(checkInbox,90000);
 
 /* ================= 初期化 ================= */
+applyFont();
 renderTalks();
 renderSettings();
 updatePwaStatus();
