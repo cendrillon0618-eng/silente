@@ -215,6 +215,16 @@ img{display:block}
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
     </div>
     <div class="settsec">
+      <div class="sechead">サーバー接続（Phase 3）</div>
+      <div class="field"><label>サーバーURL</label><input type="text" id="setServerUrl" placeholder="https://xxx.workers.dev"></div>
+      <div class="field"><label>合言葉（MM_TOKEN）</label><input type="password" id="setServerToken"></div>
+      <div class="sheetitem" onclick="subscribePush()"><span class="si">🤝</span>プッシュ購読を登録する</div>
+      <div class="sheetitem" onclick="syncConfig()"><span class="si">🔄</span>キャラ設定をサーバーに同期</div>
+      <div class="sheetitem" onclick="serverTestPush()"><span class="si">📮</span>サーバー経由のテスト通知</div>
+      <div class="sheetitem" onclick="forceRun()"><span class="si">💬</span>いますぐ誰かに喋らせる（テスト）</div>
+      <div class="note">同期すると「自発トークON」のキャラが、設定した時間帯に自分からメッセージを送ってくるようになります。</div>
+    </div>
+    <div class="settsec">
       <div class="sechead">通知（Phase 2）</div>
       <div class="note" id="pwaStatus" style="margin-top:10px"></div>
       <div class="sheetitem" onclick="askNotifPermission()"><span class="si">🔔</span>通知を許可する</div>
@@ -223,7 +233,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v2.0.1</div>
+      <div class="note">Makemarry v3.0</div>
     </div>
     <div class="settsec">
       <div class="sechead">データ</div>
@@ -391,6 +401,12 @@ function openCharEdit(id){
       <select id="ceModelSel" onchange="ceModelSelChange()"></select>
       <input type="text" id="ceModel" value="${c?esc(c.model):''}" placeholder="モデルIDを直接入力" style="margin-top:8px;display:none">
     </div>
+    <div class="checkrow"><input type="checkbox" id="ceAuto" ${c&&c.auto?'checked':''}><label for="ceAuto" style="font-size:14px">自発トーク（サーバーから自分で送ってくる）</label></div>
+    <div class="field" style="display:flex;gap:10px">
+      <div style="flex:1"><label>開始（時）</label><input type="number" id="ceHourStart" value="${c&&c.hourStart!=null?c.hourStart:8}" min="0" max="23"></div>
+      <div style="flex:1"><label>終了（時）</label><input type="number" id="ceHourEnd" value="${c&&c.hourEnd!=null?c.hourEnd:23}" min="0" max="24"></div>
+      <div style="flex:1"><label>1日約何回</label><input type="number" id="cePerDay" value="${c&&c.perDay!=null?c.perDay:2}" min="1" max="20"></div>
+    </div>
     <div class="field"><label>キャラOS（システムプロンプト）</label><textarea id="ceOS" placeholder="話し方・性格・関係性・禁則など。ここに書いたものがそのまま核になります。">${c?esc(c.os):''}</textarea></div>
     <div class="btnrow">
       ${c?'<button class="btn danger" onclick="deleteChar(\''+c.id+'\')">削除</button>':''}
@@ -451,6 +467,10 @@ function saveChar(id){
   if(!name){toast('名前を入れてください');return}
   const data={
     name, icon:editIcon,
+    auto:document.getElementById('ceAuto').checked,
+    hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
+    hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
+    perDay:parseInt(document.getElementById('cePerDay').value)||2,
     provider:document.getElementById('ceProvider').value,
     model:(document.getElementById('ceModelSel').value==='__custom__'?document.getElementById('ceModel').value.trim():document.getElementById('ceModelSel').value),
     os:document.getElementById('ceOS').value
@@ -1022,6 +1042,8 @@ function renderSettings(){
   document.getElementById('setOpenai').value=settings.openaiKey||'';
   document.getElementById('setGemini').value=settings.geminiKey||'';
   document.getElementById('setUserName').value=settings.userName||'';
+  document.getElementById('setServerUrl').value=settings.serverUrl||'';
+  document.getElementById('setServerToken').value=settings.serverToken||'';
   document.getElementById('setShortStyle').checked=settings.shortStyle!==false;
   document.getElementById('setMaxTokens').value=settings.maxTokens||1024;
   document.getElementById('setHistLimit').value=settings.histLimit||40;
@@ -1037,6 +1059,8 @@ function saveSettings(){
     openaiKey:document.getElementById('setOpenai').value.trim(),
     geminiKey:document.getElementById('setGemini').value.trim(),
     userName:document.getElementById('setUserName').value.trim(),
+    serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
+    serverToken:document.getElementById('setServerToken').value.trim(),
     shortStyle:document.getElementById('setShortStyle').checked,
     maxTokens:parseInt(document.getElementById('setMaxTokens').value)||1024,
     histLimit:parseInt(document.getElementById('setHistLimit').value)||40
@@ -1194,10 +1218,109 @@ async function testNotification(){
   toast('送りました（ホームに戻ると見えます）');
 }
 
+/* ================= サーバー連携（Phase 3） ================= */
+function serverReady(){return settings.serverUrl&&settings.serverToken}
+async function serverFetch(path,opts){
+  opts=opts||{};
+  opts.headers=Object.assign({'Content-Type':'application/json','x-mm-token':settings.serverToken},opts.headers||{});
+  const res=await fetch(settings.serverUrl+path,opts);
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
+  return data;
+}
+function b64uToU8(s){
+  s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';
+  const bin=atob(s);const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  return u;
+}
+async function subscribePush(){
+  saveSettings();
+  if(!serverReady()){toast('サーバーURLと合言葉を入れて保存してください');return}
+  if(!isStandalone()){toast('ホーム画面のアプリから実行してください');return}
+  if(Notification.permission!=='granted'){toast('先に「通知を許可する」を押してください');return}
+  if(!swReg){toast('準備中です。数秒後にもう一度');return}
+  try{
+    const pk=await fetch(settings.serverUrl+'/public-key').then(r=>r.json());
+    const sub=await swReg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uToU8(pk.key)});
+    await serverFetch('/subscribe',{method:'POST',body:JSON.stringify({subscription:sub.toJSON()})});
+    toast('購読を登録しました🤝');
+  }catch(e){showError(e)}
+}
+async function syncConfig(){
+  saveSettings();
+  if(!serverReady()){toast('サーバーURLと合言葉を入れて保存してください');return}
+  try{
+    const cfg={
+      userName:userName(),
+      chars:chars.map(c=>({
+        name:c.name,
+        model:c.provider==='anthropic'?c.model:'claude-sonnet-4-6',
+        os:c.os||'',
+        memo:(album[c.id]||[]).slice(-5).map(e=>'・'+e.text).join('\n'),
+        auto:!!c.auto,
+        hourStart:c.hourStart!=null?c.hourStart:8,
+        hourEnd:c.hourEnd!=null?c.hourEnd:23,
+        perDay:c.perDay!=null?c.perDay:2,
+        minGapHours:3
+      }))
+    };
+    const r=await serverFetch('/config',{method:'POST',body:JSON.stringify(cfg)});
+    toast('同期しました（'+r.chars+'キャラ）');
+  }catch(e){showError(e)}
+}
+async function serverTestPush(){
+  saveSettings();
+  if(!serverReady()){toast('サーバーURLと合言葉を入れてください');return}
+  try{
+    const r=await serverFetch('/test-push');
+    toast(r.pushed===201?'送信しました。ホームに戻って確認':'結果: '+JSON.stringify(r));
+  }catch(e){showError(e)}
+}
+async function forceRun(){
+  saveSettings();
+  if(!serverReady()){toast('サーバーURLと合言葉を入れてください');return}
+  toast('生成中…（自発トークONのキャラが対象）');
+  try{
+    const r=await serverFetch('/run');
+    if(r.results&&r.results.length){
+      toast(r.results.map(x=>x.char+(x.error?'❌':'✉️')).join(' '));
+      setTimeout(checkInbox,800);
+    }else{
+      toast('対象キャラなし。キャラ編集で自発トークをONにして同期してください');
+    }
+  }catch(e){showError(e)}
+}
+async function checkInbox(){
+  if(!serverReady())return;
+  try{
+    const r=await serverFetch('/inbox?clear=1');
+    if(!r.messages||!r.messages.length)return;
+    for(const m of r.messages){
+      const c=chars.find(x=>x.name===m.char);
+      if(!c)continue;
+      let t=talks.find(x=>x.type==='dm'&&x.charIds[0]===c.id);
+      if(!t){t={id:uid(),type:'dm',charIds:[c.id],title:'',memory:'',wallpaper:{type:'preset',value:'yoi'},lastTs:0,lastPreview:'',unread:0};talks.push(t)}
+      const msgs=getMsgs(t.id);
+      msgs.push({id:uid(),role:'char',charId:c.id,text:m.text,ts:m.ts||Date.now()});
+      saveMsgs(t.id,msgs);
+      t.lastTs=m.ts||Date.now();
+      t.lastPreview=c.name+': '+m.text.slice(0,40);
+      if(!curTalk||curTalk.id!==t.id)t.unread=(t.unread||0)+1;
+      else renderMsgs(true);
+    }
+    saveTalks();
+    if(document.getElementById('scr-talks').classList.contains('active'))renderTalks();
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkInbox()});
+setInterval(checkInbox,90000);
+
 /* ================= 初期化 ================= */
 renderTalks();
 renderSettings();
 updatePwaStatus();
+checkInbox();
 </script>
 </body>
 </html>
