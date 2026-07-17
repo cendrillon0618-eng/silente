@@ -272,7 +272,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.7</div>
+      <div class="note">Makemarry v3.7.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -782,26 +782,7 @@ function msgActions(msgId){
 }
 let curAudio=null;
 const voiceCache={};
-/* --- 読み上げ用ふりがな変換 --- */
-let kuroTokenizer=null,kuroLoading=null;
-function loadKuromoji(){
-  if(kuroTokenizer)return Promise.resolve(kuroTokenizer);
-  if(kuroLoading)return kuroLoading;
-  kuroLoading=new Promise((resolve,reject)=>{
-    const sc=document.createElement('script');
-    sc.src='https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js';
-    sc.onload=()=>{
-      kuromoji.builder({dicPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'}).build((err,tk)=>{
-        if(err){reject(err);return}
-        kuroTokenizer=tk;resolve(tk);
-      });
-    };
-    sc.onerror=()=>reject(new Error('読み仮名エンジンの読み込みに失敗'));
-    document.head.appendChild(sc);
-  });
-  return kuroLoading;
-}
-function kataToHira(s){return s.replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60))}
+/* --- 読み上げ用ふりがな変換（Haiku清書方式） --- */
 function applyDict(text){
   const dict=settings.readDict||{};
   Object.keys(dict).sort((a,b)=>b.length-a.length).forEach(k=>{
@@ -809,24 +790,18 @@ function applyDict(text){
   });
   return text;
 }
+const readingCache={};
 async function toReading(text){
   text=applyDict(text);
   if(!/[\u4e00-\u9faf]/.test(text))return text; // 漢字なしならそのまま
-  const tk=await loadKuromoji();
-  const tokens=tk.tokenize(text);
-  let out='',prevWasWord=false;
-  for(const t of tokens){
-    const surface=t.surface_form;
-    const hasKanji=/[\u4e00-\u9faf]/.test(surface);
-    let piece;
-    if(hasKanji&&t.reading){piece=kataToHira(t.reading)}
-    else{piece=surface}
-    const isWord=!/^[\s、。！？!?…（）「」\n]+$/.test(piece);
-    if(prevWasWord&&isWord&&hasKanji)out+=' ';
-    out+=piece;
-    prevWasWord=isWord;
-  }
-  return out;
+  if(readingCache[text])return readingCache[text];
+  if(!settings.anthropicKey)return text; // Haikuが使えなければ原文
+  const dict=settings.readDict||{};
+  const dictNote=Object.keys(dict).length?`\n固有名詞の読み: ${Object.entries(dict).map(([k,v])=>k+'='+v).join('、')}`:'';
+  const prompt=`次の文章を、音声読み上げ用に全てひらがなに変換してください。\nルール：\n- 言葉は一切変えない・省略しない・追加しない。読み仮名に変換するだけ\n- 語の区切りに半角スペースを入れる\n- 句読点・記号・改行はそのまま残す\n- 変換結果だけを出力する${dictNote}\n\n文章：\n${text}`;
+  const r=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:prompt}],1000);
+  readingCache[text]=r;
+  return r;
 }
 function voiceActive(c){
   return settings.voiceOn!==false && settings.elevenKey && c && c.voiceId
