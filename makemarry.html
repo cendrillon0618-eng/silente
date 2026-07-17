@@ -236,6 +236,8 @@ img{display:block}
       <div class="field"><label>xAI（Grok）</label><input type="password" id="setXai" placeholder="xai-..."></div>
       <div class="field"><label>ElevenLabs（声）</label><input type="password" id="setEleven" placeholder="xi-... または sk_..."></div>
       <div class="checkrow"><input type="checkbox" id="setVoiceOn" checked><label for="setVoiceOn" style="font-size:14px">声の読み上げ機能を使う（吹き出しに🔊が出ます）</label></div>
+      <div class="checkrow"><input type="checkbox" id="setYomiOn" checked><label for="setYomiOn" style="font-size:14px">読み上げ時に漢字を自動でふりがな化する（誤読対策）</label></div>
+      <div class="sheetitem" onclick="editReadDict()"><span class="si">📖</span>読み方辞書（固有名詞の読みを登録）</div>
     </div>
     <div class="settsec">
       <div class="sechead">会話</div>
@@ -270,7 +272,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.5</div>
+      <div class="note">Makemarry v3.7</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -484,6 +486,17 @@ function openCharEdit(id){
       <input type="text" id="ceModel" value="${c?esc(c.model):''}" placeholder="モデルIDを直接入力" style="margin-top:8px;display:none">
     </div>
     <div class="field"><label>Voice ID（ElevenLabsの声。空なら読み上げなし）</label><input type="text" id="ceVoice" value="${c&&c.voiceId?esc(c.voiceId):''}" placeholder="例: 21m00Tcm4TlvDq8ikWAM"></div>
+    <div class="field"><label>音声モデル</label>
+      <select id="ceVoiceModel">
+        <option value="eleven_multilingual_v2"${!c||!c.voiceModel||c.voiceModel==='eleven_multilingual_v2'?' selected':''}>Multilingual v2（安定・標準）</option>
+        <option value="eleven_v3"${c&&c.voiceModel==='eleven_v3'?' selected':''}>v3（表現力重視・消費多め）</option>
+        <option value="eleven_turbo_v2_5"${c&&c.voiceModel==='eleven_turbo_v2_5'?' selected':''}>Turbo v2.5（速い・安い）</option>
+      </select>
+    </div>
+    <div class="field" style="display:flex;gap:10px">
+      <div style="flex:1"><label>Stability（低=感情豊か 高=安定）</label><input type="number" id="ceStab" value="${c&&c.vStability!=null?c.vStability:0.4}" min="0" max="1" step="0.05"></div>
+      <div style="flex:1"><label>Style（表現の強さ）</label><input type="number" id="ceStyle" value="${c&&c.vStyle!=null?c.vStyle:0.4}" min="0" max="1" step="0.05"></div>
+    </div>
     <div class="checkrow"><input type="checkbox" id="ceAuto" ${c&&c.auto?'checked':''}><label for="ceAuto" style="font-size:14px">自発トーク（サーバーから自分で送ってくる）</label></div>
     <div class="field" style="display:flex;gap:10px">
       <div style="flex:1"><label>開始（時）</label><input type="number" id="ceHourStart" value="${c&&c.hourStart!=null?c.hourStart:8}" min="0" max="23"></div>
@@ -559,6 +572,9 @@ function saveChar(id){
   const data={
     name, icon:editIcon,
     voiceId:document.getElementById('ceVoice').value.trim(),
+    voiceModel:document.getElementById('ceVoiceModel').value,
+    vStability:parseFloat(document.getElementById('ceStab').value),
+    vStyle:parseFloat(document.getElementById('ceStyle').value),
     auto:document.getElementById('ceAuto').checked,
     hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
     hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
@@ -758,7 +774,7 @@ function msgActions(msgId){
   const isLastChar=m.role==='char'&&msgs[msgs.length-1].id===msgId;
   openSheet(`
     <div class="sheettitle">メッセージ</div>
-    ${m.role==='user'?`<div class="sheetitem" onclick="editMsg('${msgId}')"><span class="si">✏️</span>編集する</div>`:''}
+    <div class="sheetitem" onclick="editMsg('${msgId}')"><span class="si">✏️</span>編集する</div>
     ${(()=>{const mc=m.role==='char'?chars.find(x=>x.id===m.charId):null;if(!(mc&&mc.voiceId&&settings.elevenKey))return '';return `<div class="sheetitem" onclick="speakMsg('${msgId}')"><span class="si">🔊</span>声で聴く</div><div class="sheetitem" onclick="saveVoiceMp3('${msgId}')"><span class="si">💾</span>音声をmp3で保存</div>`})()}
     ${isLastChar?`<div class="sheetitem" onclick="regenMsg('${msgId}')"><span class="si">🔄</span>もう一度生成する</div>`:''}
     <div class="sheetitem" onclick="copyMsg('${msgId}')"><span class="si">📋</span>コピー</div>
@@ -766,17 +782,78 @@ function msgActions(msgId){
 }
 let curAudio=null;
 const voiceCache={};
+/* --- 読み上げ用ふりがな変換 --- */
+let kuroTokenizer=null,kuroLoading=null;
+function loadKuromoji(){
+  if(kuroTokenizer)return Promise.resolve(kuroTokenizer);
+  if(kuroLoading)return kuroLoading;
+  kuroLoading=new Promise((resolve,reject)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js';
+    sc.onload=()=>{
+      kuromoji.builder({dicPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'}).build((err,tk)=>{
+        if(err){reject(err);return}
+        kuroTokenizer=tk;resolve(tk);
+      });
+    };
+    sc.onerror=()=>reject(new Error('読み仮名エンジンの読み込みに失敗'));
+    document.head.appendChild(sc);
+  });
+  return kuroLoading;
+}
+function kataToHira(s){return s.replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60))}
+function applyDict(text){
+  const dict=settings.readDict||{};
+  Object.keys(dict).sort((a,b)=>b.length-a.length).forEach(k=>{
+    text=text.split(k).join(dict[k]);
+  });
+  return text;
+}
+async function toReading(text){
+  text=applyDict(text);
+  if(!/[\u4e00-\u9faf]/.test(text))return text; // 漢字なしならそのまま
+  const tk=await loadKuromoji();
+  const tokens=tk.tokenize(text);
+  let out='',prevWasWord=false;
+  for(const t of tokens){
+    const surface=t.surface_form;
+    const hasKanji=/[\u4e00-\u9faf]/.test(surface);
+    let piece;
+    if(hasKanji&&t.reading){piece=kataToHira(t.reading)}
+    else{piece=surface}
+    const isWord=!/^[\s、。！？!?…（）「」\n]+$/.test(piece);
+    if(prevWasWord&&isWord&&hasKanji)out+=' ';
+    out+=piece;
+    prevWasWord=isWord;
+  }
+  return out;
+}
 function voiceActive(c){
   return settings.voiceOn!==false && settings.elevenKey && c && c.voiceId
     && (!curTalk||curTalk.voiceMute!==true);
 }
 async function getVoiceBlob(m,c){
-  if(voiceCache[m.id])return voiceCache[m.id];
+  const vkey=m.id+'|'+(c.voiceModel||'v2')+'|'+(c.vStability??0.4)+'|'+(c.vStyle??0.4);
+  if(voiceCache[vkey])return voiceCache[vkey];
   toast(c.name+'の声を生成中…');
+  let speakText=m.text;
+  if(settings.yomiOn!==false){
+    try{speakText=await toReading(m.text)}catch(e){/* 変換失敗時は原文のまま */}
+  }
+  const body={
+    text:speakText,
+    model_id:c.voiceModel||'eleven_multilingual_v2',
+    voice_settings:{
+      stability:c.vStability!=null?c.vStability:0.4,
+      similarity_boost:0.8,
+      style:c.vStyle!=null?c.vStyle:0.4,
+      use_speaker_boost:true
+    }
+  };
   const res=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(c.voiceId),{
     method:'POST',
     headers:{'xi-api-key':settings.elevenKey,'Content-Type':'application/json'},
-    body:JSON.stringify({text:m.text,model_id:'eleven_multilingual_v2'})
+    body:JSON.stringify(body)
   });
   if(!res.ok){
     let msg='HTTP '+res.status;
@@ -784,7 +861,7 @@ async function getVoiceBlob(m,c){
     throw new Error(msg);
   }
   const blob=await res.blob();
-  voiceCache[m.id]=blob;
+  voiceCache[vkey]=blob;
   return blob;
 }
 async function playVoice(id){
@@ -827,11 +904,27 @@ function deleteMsg(id){
 }
 function editMsg(id){
   const m=getMsgs(curTalk.id).find(x=>x.id===id);
+  if(m.role==='char'){
+    openSheet(`
+      <div class="sheettitle">メッセージを編集</div>
+      <div class="field"><textarea id="emText">${esc(m.text)}</textarea></div>
+      <div class="note">キャラのメッセージをその場で書き換えます（履歴は削除されません）。</div>
+      <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="applyCharEdit('${id}')">保存</button></div>`);
+    return;
+  }
   openSheet(`
     <div class="sheettitle">メッセージを編集</div>
     <div class="field"><textarea id="emText">${esc(m.text)}</textarea></div>
     <div class="note">保存すると、このメッセージ以降のやり取りは削除され、ここから会話が続きます。</div>
     <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="applyEdit('${id}')">保存して続ける</button></div>`);
+}
+function applyCharEdit(id){
+  const text=document.getElementById('emText').value.trim();
+  if(!text)return;
+  const msgs=getMsgs(curTalk.id);
+  const m=msgs.find(x=>x.id===id);
+  if(m){m.text=text;saveMsgs(curTalk.id,msgs)}
+  closeSheet();renderMsgs(true);
 }
 function applyEdit(id){
   const text=document.getElementById('emText').value.trim();
@@ -1226,6 +1319,7 @@ function renderSettings(){
   document.getElementById('setXai').value=settings.xaiKey||'';
   document.getElementById('setEleven').value=settings.elevenKey||'';
   document.getElementById('setVoiceOn').checked=settings.voiceOn!==false;
+  document.getElementById('setYomiOn').checked=settings.yomiOn!==false;
   document.getElementById('setUserName').value=settings.userName||'';
   document.getElementById('setServerUrl').value=settings.serverUrl||'';
   document.getElementById('setServerToken').value=settings.serverToken||'';
@@ -1256,6 +1350,25 @@ function renderSettings(){
   }
   document.getElementById('usageInfo').innerHTML=html;
   updatePwaStatus();
+}
+function editReadDict(){
+  const dict=settings.readDict||{};
+  const lines=Object.entries(dict).map(([k,v])=>k+'＝'+v).join('\n');
+  openSheet(`
+    <div class="sheettitle">📖 読み方辞書</div>
+    <div class="note" style="margin-bottom:10px">1行に「単語＝よみ」の形式で。自動ふりがなより優先されます。<br>例：奏音＝かのん</div>
+    <div class="field"><textarea id="rdText" style="min-height:160px" placeholder="奏音＝かのん\n灯＝ともり\n遙＝はるか">${esc(lines)}</textarea></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="saveReadDict()">保存</button></div>`);
+}
+function saveReadDict(){
+  const dict={};
+  document.getElementById('rdText').value.split('\n').forEach(line=>{
+    const m=line.split(/[＝=]/);
+    if(m.length>=2&&m[0].trim()&&m[1].trim())dict[m[0].trim()]=m[1].trim();
+  });
+  settings.readDict=dict;
+  LS.set('mm_settings',settings);
+  closeSheet();toast('辞書を保存しました（'+Object.keys(dict).length+'語）');
 }
 function editPrices(){
   const keys=Object.keys(usage).filter(k=>k!=='_last');
@@ -1294,6 +1407,8 @@ function saveSettings(){
     xaiKey:document.getElementById('setXai').value.trim(),
     elevenKey:document.getElementById('setEleven').value.trim(),
     voiceOn:document.getElementById('setVoiceOn').checked,
+    yomiOn:document.getElementById('setYomiOn').checked,
+    readDict:settings.readDict||{},
     userName:document.getElementById('setUserName').value.trim(),
     serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
     serverToken:document.getElementById('setServerToken').value.trim(),
