@@ -230,6 +230,7 @@ img{display:block}
       <div class="field"><label>Anthropic（Claude）</label><input type="password" id="setAnthropic" placeholder="sk-ant-..."></div>
       <div class="field"><label>OpenAI（GPT）</label><input type="password" id="setOpenai" placeholder="sk-..."></div>
       <div class="field"><label>Google（Gemini）</label><input type="password" id="setGemini" placeholder="AIza..."></div>
+      <div class="field"><label>xAI（Grok）</label><input type="password" id="setXai" placeholder="xai-..."></div>
     </div>
     <div class="settsec">
       <div class="sechead">会話</div>
@@ -264,7 +265,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.2</div>
+      <div class="note">Makemarry v3.3</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -449,6 +450,7 @@ function openCharEdit(id){
         <option value="anthropic"${!c||c.provider==='anthropic'?' selected':''}>Claude（Anthropic）</option>
         <option value="openai"${c&&c.provider==='openai'?' selected':''}>GPT（OpenAI）</option>
         <option value="gemini"${c&&c.provider==='gemini'?' selected':''}>Gemini（Google）</option>
+        <option value="grok"${c&&c.provider==='grok'?' selected':''}>Grok（xAI）</option>
       </select>
     </div>
     <div class="field"><label>モデル</label>
@@ -487,9 +489,17 @@ const MODELS={
     ['gpt-5.6-luna','GPT-5.6 Luna']
   ],
   gemini:[
-    ['gemini-2.0-flash','Gemini 2.0 Flash'],
+    ['gemini-2.5-flash','Gemini 2.5 Flash（使いやすい）'],
     ['gemini-2.5-pro','Gemini 2.5 Pro'],
-    ['gemini-2.5-flash','Gemini 2.5 Flash']
+    ['gemini-3.1-flash-lite','Gemini 3.1 Flash Lite（速い）'],
+    ['gemini-3.1-pro-preview','Gemini 3.1 Pro（高性能）'],
+    ['gemini-3.5-flash','Gemini 3.5 Flash（最新）']
+  ],
+  grok:[
+    ['grok-4-1-fast-non-reasoning','Grok 4.1 Fast（使いやすい・速い）'],
+    ['grok-4-1-fast-reasoning','Grok 4.1 Fast 思考型'],
+    ['grok-4.3','Grok 4.3'],
+    ['grok-4.5','Grok 4.5（最新）']
   ]
 };
 function ceModelPlaceholder(){
@@ -1028,6 +1038,7 @@ async function callProvider(provider,model,system,messages,maxTokens){
   if(provider==='anthropic')return anthropicCall(model,system,messages,maxTokens);
   if(provider==='openai')return openaiCall(model,system,messages,maxTokens);
   if(provider==='gemini')return geminiCall(model,system,messages,maxTokens);
+  if(provider==='grok')return grokCall(model,system,messages,maxTokens);
   throw new Error('不明なプロバイダー');
 }
 function toAnthropicMsgs(blocks){
@@ -1053,6 +1064,30 @@ async function anthropicCall(model,system,messages,maxTokens){
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
   if(data.usage)recordUsage('Claude',model,data.usage.input_tokens,data.usage.output_tokens);
   return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+}
+function toOaiConv(messages){
+  return messages.map(b=>{
+    if(typeof b.content==='string')return b;
+    if(b.parts.every(p=>p.t==='text'))return {role:b.role,content:partsToText(b.parts)};
+    return {role:b.role,content:b.parts.map(p=>p.t==='img'
+      ?{type:'image_url',image_url:{url:p.v}}
+      :{type:'text',text:p.v})};
+  });
+}
+async function grokCall(model,system,messages,maxTokens){
+  if(!settings.xaiKey)throw new Error('xAIのAPIキーが未設定です');
+  const conv=toOaiConv(messages);
+  const msgs=system?[{role:'system',content:system},...conv]:conv;
+  const res=await fetch('https://api.x.ai/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.xaiKey},
+    body:JSON.stringify({model,messages:msgs,max_tokens:maxTokens})
+  });
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error?(data.error.message||JSON.stringify(data.error)):res.status);
+  if(data.usage)recordUsage('Grok',model,data.usage.prompt_tokens,data.usage.completion_tokens);
+  if(!data.choices||!data.choices[0])throw new Error('Grok応答が不正: '+JSON.stringify(data).slice(0,200));
+  return data.choices[0].message.content.trim();
 }
 async function openaiCall(model,system,messages,maxTokens){
   if(!settings.openaiKey)throw new Error('OpenAIのAPIキーが未設定です');
@@ -1100,6 +1135,7 @@ function renderSettings(){
   document.getElementById('setAnthropic').value=settings.anthropicKey||'';
   document.getElementById('setOpenai').value=settings.openaiKey||'';
   document.getElementById('setGemini').value=settings.geminiKey||'';
+  document.getElementById('setXai').value=settings.xaiKey||'';
   document.getElementById('setUserName').value=settings.userName||'';
   document.getElementById('setServerUrl').value=settings.serverUrl||'';
   document.getElementById('setServerToken').value=settings.serverToken||'';
@@ -1127,6 +1163,7 @@ function saveSettings(){
     anthropicKey:document.getElementById('setAnthropic').value.trim(),
     openaiKey:document.getElementById('setOpenai').value.trim(),
     geminiKey:document.getElementById('setGemini').value.trim(),
+    xaiKey:document.getElementById('setXai').value.trim(),
     userName:document.getElementById('setUserName').value.trim(),
     serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
     serverToken:document.getElementById('setServerToken').value.trim(),
@@ -1363,6 +1400,7 @@ async function runDiag(){
   lines.push(checkKeyChars('Anthropic',settings.anthropicKey));
   lines.push(checkKeyChars('OpenAI',settings.openaiKey));
   lines.push(checkKeyChars('Gemini',settings.geminiKey));
+  lines.push(checkKeyChars('xAI',settings.xaiKey));
   lines.push('');
   if(settings.anthropicKey){
     lines.push('AnthropicにテストAPI送信中...');
@@ -1454,7 +1492,7 @@ async function syncConfig(){
       userName:userName(),
       chars:chars.map(c=>({
         name:c.name,
-        model:c.provider==='anthropic'?c.model:'claude-sonnet-4-6',
+        model:c.model,
         os:c.os||'',
         memo:((album[c.id]||[]).slice(-5).map(e=>'・'+e.text).join('\n')+(eventsForPrompt()?'\n【これからの予定】\n'+eventsForPrompt():'')).trim(),
         auto:!!c.auto,
