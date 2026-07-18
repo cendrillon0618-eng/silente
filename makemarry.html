@@ -272,7 +272,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.7.1</div>
+      <div class="note">Makemarry v3.8</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -791,16 +791,31 @@ function applyDict(text){
   return text;
 }
 const readingCache={};
-async function toReading(text){
+async function toReading(text,useTags){
   text=applyDict(text);
-  if(!/[\u4e00-\u9faf]/.test(text))return text; // 漢字なしならそのまま
-  if(readingCache[text])return readingCache[text];
-  if(!settings.anthropicKey)return text; // Haikuが使えなければ原文
+  const ck=(useTags?'T|':'P|')+text;
+  if(readingCache[ck])return readingCache[ck];
+  if(!settings.anthropicKey)return text;
   const dict=settings.readDict||{};
   const dictNote=Object.keys(dict).length?`\n固有名詞の読み: ${Object.entries(dict).map(([k,v])=>k+'='+v).join('、')}`:'';
-  const prompt=`次の文章を、音声読み上げ用に全てひらがなに変換してください。\nルール：\n- 言葉は一切変えない・省略しない・追加しない。読み仮名に変換するだけ\n- 語の区切りに半角スペースを入れる\n- 句読点・記号・改行はそのまま残す\n- 変換結果だけを出力する${dictNote}\n\n文章：\n${text}`;
-  const r=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:prompt}],1000);
-  readingCache[text]=r;
+  const tagRules=useTags?`
+- セリフの感情を読み取り、効果的な位置に英語の演技タグを挿入してよい（入れすぎない。1メッセージに0〜3個まで）
+- 使えるタグ例: [whispers]（囁く）[sighs]（ため息）[laughs softly]（ふっと笑う）[laughs]（笑う）[angry]（怒気）[sad]（沈む）[excited]（弾む）[curious]（問いかけ）
+- 「……」や余韻には <break time="0.7s" /> を使う（長い沈黙は1.0s）
+- 甘い・色っぽい低音で言うべき箇所は [whispers] が有効`:`
+- 「……」や余韻には <break time="0.7s" /> を挿入してよい（それ以外の追加はしない）`;
+  const prompt=`あなたは音声演出の専門家です。次のセリフを、音声読み上げ（ElevenLabs）用の原稿に変換してください。
+ルール：
+- 言葉そのものは一切変えない・省略しない・言い足さない。読み仮名への変換と演出指定だけを行う
+- 漢字は全てひらがなに変換する
+- 区切りの半角スペースは「自然なイントネーションのまとまり」ごとに入れる。文節の途中や複合語の中で切らない。細かく刻みすぎるとぶつ切りに聞こえるので、ひと息で言う塊は繋げたままにする
+- 句読点・！？・改行はそのまま残す${tagRules}${dictNote}
+- 変換結果だけを出力する
+
+セリフ：
+${text}`;
+  const r=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:prompt}],1200);
+  readingCache[ck]=r;
   return r;
 }
 function voiceActive(c){
@@ -813,7 +828,8 @@ async function getVoiceBlob(m,c){
   toast(c.name+'の声を生成中…');
   let speakText=m.text;
   if(settings.yomiOn!==false){
-    try{speakText=await toReading(m.text)}catch(e){/* 変換失敗時は原文のまま */}
+    const useTags=(c.voiceModel||'eleven_multilingual_v2')==='eleven_v3';
+    try{speakText=await toReading(m.text,useTags)}catch(e){/* 変換失敗時は原文のまま */}
   }
   const body={
     text:speakText,
