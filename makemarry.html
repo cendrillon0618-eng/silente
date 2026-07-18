@@ -278,7 +278,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v4.0.1</div>
+      <div class="note">Makemarry v4.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -1289,6 +1289,16 @@ function partsToText(parts){return parts.filter(p=>p.t==='text').map(p=>p.v).joi
 async function callModel(c){
   return callProvider(c.provider,c.model,buildSystem(c),buildTranscript(c),settings.maxTokens||1024);
 }
+async function fetchT(url,opts,ms){
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),ms||120000);
+  try{
+    return await fetch(url,Object.assign({},opts,{signal:ctrl.signal}));
+  }catch(e){
+    if(e.name==='AbortError')throw new Error('応答が時間切れになりました（混雑の可能性）。もう一度送信してください');
+    throw e;
+  }finally{clearTimeout(t)}
+}
 async function callProvider(provider,model,system,messages,maxTokens){
   if(provider==='anthropic')return anthropicCall(model,system,messages,maxTokens);
   if(provider==='openai')return openaiCall(model,system,messages,maxTokens);
@@ -1309,7 +1319,7 @@ async function anthropicCall(model,system,messages,maxTokens){
   if(!settings.anthropicKey)throw new Error('AnthropicのAPIキーが未設定です');
   const body={model,max_tokens:maxTokens,messages:toAnthropicMsgs(messages)};
   if(system)body.system=[{type:'text',text:system,cache_control:{type:'ephemeral'}}];
-  const res=await fetch('https://api.anthropic.com/v1/messages',{
+  const res=await fetchT('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':settings.anthropicKey,
       'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -1333,7 +1343,7 @@ async function grokCall(model,system,messages,maxTokens){
   if(!settings.xaiKey)throw new Error('xAIのAPIキーが未設定です');
   const conv=toOaiConv(messages);
   const msgs=system?[{role:'system',content:system},...conv]:conv;
-  const res=await fetch('https://api.x.ai/v1/chat/completions',{
+  const res=await fetchT('https://api.x.ai/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.xaiKey},
     body:JSON.stringify({model,messages:msgs,max_tokens:maxTokens})
@@ -1354,16 +1364,23 @@ async function openaiCall(model,system,messages,maxTokens){
       :{type:'text',text:p.v})};
   });
   const msgs=system?[{role:'system',content:system},...conv]:conv;
-  const res=await fetch('https://api.openai.com/v1/chat/completions',{
+  const isG5=model.startsWith('gpt-5');
+  const body={model,messages:msgs,max_completion_tokens:isG5?maxTokens+4096:maxTokens};
+  if(isG5)body.reasoning_effort='low';
+  const res=await fetchT('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.openaiKey},
-    body:JSON.stringify({model,messages:msgs,max_completion_tokens:maxTokens})
+    body:JSON.stringify(body)
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
   if(data.usage)recordUsage('GPT',model,data.usage.prompt_tokens,data.usage.completion_tokens);
   if(!data.choices||!data.choices[0])throw new Error('OpenAI応答が不正: '+JSON.stringify(data).slice(0,200));
-  return data.choices[0].message.content.trim();
+  const ch=data.choices[0];
+  if(ch.message.refusal)throw new Error('GPTが拒否しました: '+ch.message.refusal);
+  const content=(ch.message.content||'').trim();
+  if(!content)throw new Error('GPTが本文なしで応答しました（finish_reason: '+ch.finish_reason+'）。安全判定か思考トークン超過の可能性');
+  return content;
 }
 async function geminiCall(model,system,messages,maxTokens){
   if(!settings.geminiKey)throw new Error('GeminiのAPIキーが未設定です');
@@ -1373,15 +1390,23 @@ async function geminiCall(model,system,messages,maxTokens){
       :{text:p.v});
     return {role:b.role==='assistant'?'model':'user',parts};
   });
-  const body={contents,generationConfig:{maxOutputTokens:maxTokens}};
+  const body={contents,generationConfig:{maxOutputTokens:maxTokens},
+    safetySettings:[
+      {category:'HARM_CATEGORY_HARASSMENT',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_HATE_SPEECH',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
+    ]};
   if(system)body.systemInstruction={parts:[{text:system}]};
-  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`,{
+  const res=await fetchT(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`,{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
   });
   const data=await res.json();
   if(!res.ok)throw new Error(data.error?data.error.message:res.status);
   if(data.usageMetadata)recordUsage('Gemini',model,data.usageMetadata.promptTokenCount,data.usageMetadata.candidatesTokenCount);
+  if(data.promptFeedback&&data.promptFeedback.blockReason)throw new Error('Geminiが入力をブロックしました: '+data.promptFeedback.blockReason);
   if(!data.candidates||!data.candidates[0])throw new Error('Gemini応答が不正: '+JSON.stringify(data).slice(0,200));
+  if(data.candidates[0].finishReason==='SAFETY')throw new Error('Geminiの安全判定で応答が止められました');
   return data.candidates[0].content.parts.map(p=>p.text).join('').trim();
 }
 
