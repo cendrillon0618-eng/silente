@@ -272,7 +272,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.8</div>
+      <div class="note">Makemarry v3.9</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -494,9 +494,11 @@ function openCharEdit(id){
       </select>
     </div>
     <div class="field" style="display:flex;gap:10px">
-      <div style="flex:1"><label>Stability（低=感情豊か 高=安定）</label><input type="number" id="ceStab" value="${c&&c.vStability!=null?c.vStability:0.4}" min="0" max="1" step="0.05"></div>
+      <div style="flex:1"><label>Stability（低=感情豊か）</label><input type="number" id="ceStab" value="${c&&c.vStability!=null?c.vStability:0.4}" min="0" max="1" step="0.05"></div>
       <div style="flex:1"><label>Style（表現の強さ）</label><input type="number" id="ceStyle" value="${c&&c.vStyle!=null?c.vStyle:0.4}" min="0" max="1" step="0.05"></div>
+      <div style="flex:1"><label>速さ（0.7〜1.2）</label><input type="number" id="ceSpeed" value="${c&&c.vSpeed!=null?c.vSpeed:1.0}" min="0.7" max="1.2" step="0.05"></div>
     </div>
+    <div class="field"><label>演技メモ（この子の喋り方の演出指示。読み上げに反映）</label><textarea id="ceActNote" style="min-height:60px" placeholder="例：基本は低温で静か。囁きを効果的に。笑いは短く鼻で。感情が動くほど声は小さくなる">${c&&c.actNote?esc(c.actNote):''}</textarea></div>
     <div class="checkrow"><input type="checkbox" id="ceAuto" ${c&&c.auto?'checked':''}><label for="ceAuto" style="font-size:14px">自発トーク（サーバーから自分で送ってくる）</label></div>
     <div class="field" style="display:flex;gap:10px">
       <div style="flex:1"><label>開始（時）</label><input type="number" id="ceHourStart" value="${c&&c.hourStart!=null?c.hourStart:8}" min="0" max="23"></div>
@@ -575,6 +577,8 @@ function saveChar(id){
     voiceModel:document.getElementById('ceVoiceModel').value,
     vStability:parseFloat(document.getElementById('ceStab').value),
     vStyle:parseFloat(document.getElementById('ceStyle').value),
+    vSpeed:parseFloat(document.getElementById('ceSpeed').value)||1.0,
+    actNote:document.getElementById('ceActNote').value.trim(),
     auto:document.getElementById('ceAuto').checked,
     hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
     hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
@@ -791,19 +795,22 @@ function applyDict(text){
   return text;
 }
 const readingCache={};
-async function toReading(text,useTags){
+async function toReading(text,useTags,actNote){
   text=applyDict(text);
-  const ck=(useTags?'T|':'P|')+text;
+  const ck=(useTags?'T|':'P|')+(actNote||'')+'|'+text;
   if(readingCache[ck])return readingCache[ck];
   if(!settings.anthropicKey)return text;
   const dict=settings.readDict||{};
   const dictNote=Object.keys(dict).length?`\n固有名詞の読み: ${Object.entries(dict).map(([k,v])=>k+'='+v).join('、')}`:'';
+  const actLine=(useTags&&actNote)?`\n- このキャラの演技指針：${actNote}`:'';
   const tagRules=useTags?`
 - セリフの感情を読み取り、効果的な位置に英語の演技タグを挿入してよい（入れすぎない。1メッセージに0〜3個まで）
 - 使えるタグ例: [whispers]（囁く）[sighs]（ため息）[laughs softly]（ふっと笑う）[laughs]（笑う）[angry]（怒気）[sad]（沈む）[excited]（弾む）[curious]（問いかけ）
 - 「……」や余韻には <break time="0.7s" /> を使う（長い沈黙は1.0s）
-- 甘い・色っぽい低音で言うべき箇所は [whispers] が有効`:`
-- 「……」や余韻には <break time="0.7s" /> を挿入してよい（それ以外の追加はしない）`;
+- 甘い・色っぽい低音で言うべき箇所は [whispers] が有効
+- 例外：「（笑）」「(笑)」・絵文字・顔文字は読み上げ原稿からは取り除く。（笑）は文脈に合えば [laughs softly] 等のタグに置き換えてよい${actLine}`:`
+- 「……」や余韻には <break time="0.7s" /> を挿入してよい（それ以外の追加はしない）
+- 例外：「（笑）」「(笑)」・絵文字・顔文字は読み上げ原稿からは取り除く`;
   const prompt=`あなたは音声演出の専門家です。次のセリフを、音声読み上げ（ElevenLabs）用の原稿に変換してください。
 ルール：
 - 言葉そのものは一切変えない・省略しない・言い足さない。読み仮名への変換と演出指定だけを行う
@@ -829,7 +836,7 @@ async function getVoiceBlob(m,c){
   let speakText=m.text;
   if(settings.yomiOn!==false){
     const useTags=(c.voiceModel||'eleven_multilingual_v2')==='eleven_v3';
-    try{speakText=await toReading(m.text,useTags)}catch(e){/* 変換失敗時は原文のまま */}
+    try{speakText=await toReading(m.text,useTags,c.actNote)}catch(e){/* 変換失敗時は原文のまま */}
   }
   const body={
     text:speakText,
@@ -838,9 +845,19 @@ async function getVoiceBlob(m,c){
       stability:c.vStability!=null?c.vStability:0.4,
       similarity_boost:0.8,
       style:c.vStyle!=null?c.vStyle:0.4,
-      use_speaker_boost:true
+      use_speaker_boost:true,
+      speed:c.vSpeed!=null?c.vSpeed:1.0
     }
   };
+  // 直前の同キャラ発言を韻律の文脈として渡す（イントネーション連続性）
+  const all=getMsgs(curTalk.id);
+  const idx=all.findIndex(x=>x.id===m.id);
+  for(let i=idx-1;i>=0;i--){
+    if(all[i].role==='char'&&all[i].charId===c.id){
+      body.previous_text=applyDict(all[i].text).slice(-300);
+      break;
+    }
+  }
   const res=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(c.voiceId),{
     method:'POST',
     headers:{'xi-api-key':settings.elevenKey,'Content-Type':'application/json'},
