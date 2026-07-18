@@ -254,6 +254,12 @@ img{display:block}
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
     </div>
     <div class="settsec">
+      <div class="sechead">共通プロンプト</div>
+      <div class="field"><label>全キャラ共通OS（いつも全員に適用）</label><textarea id="setGlobalOS" style="min-height:80px" placeholder="全キャラに常に守らせたいルール"></textarea></div>
+      <div class="field"><label>🌙 夜プロンプト・共通（夜モードONのトークだけに適用）</label><textarea id="setNightOS" style="min-height:80px" placeholder="夜モード時に全キャラへ最優先で適用される指示"></textarea></div>
+      <div class="note">キャラ別の夜OSは、各キャラの編集画面にあります。夜モードのON/OFFはトーク画面のメニュー（☰）から。</div>
+    </div>
+    <div class="settsec">
       <div class="sechead">サーバー接続（Phase 3）</div>
       <div class="field"><label>サーバーURL</label><input type="text" id="setServerUrl" placeholder="https://xxx.workers.dev"></div>
       <div class="field"><label>合言葉（MM_TOKEN）</label><input type="password" id="setServerToken"></div>
@@ -272,7 +278,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v3.9.1</div>
+      <div class="note">Makemarry v4.0.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -354,12 +360,28 @@ function costJpy(key,v){
   if(!p)return null;
   return (v.tin/1e6*p[0]+v.tout/1e6*p[1])*jpyRate();
 }
+let usageDaily = LS.get('mm_usage_daily',{});
+function ymd(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function recordUsage(provider,model,tin,tout){
   const k=provider+' / '+model;
   if(!usage[k])usage[k]={calls:0,tin:0,tout:0};
   usage[k].calls++;usage[k].tin+=tin||0;usage[k].tout+=tout||0;
   usage._last={k,tin:tin||0,tout:tout||0};
   LS.set('mm_usage',usage);
+  const day=ymd();
+  if(!usageDaily[day])usageDaily[day]={};
+  if(!usageDaily[day][k])usageDaily[day][k]={tin:0,tout:0};
+  usageDaily[day][k].tin+=tin||0;usageDaily[day][k].tout+=tout||0;
+  // 30日より古い分を整理
+  const cutoff=ymd(new Date(Date.now()-30*86400000));
+  Object.keys(usageDaily).forEach(d=>{if(d<cutoff)delete usageDaily[d]});
+  LS.set('mm_usage_daily',usageDaily);
+}
+function dayCost(day){
+  const rec=usageDaily[day];if(!rec)return 0;
+  let t=0;
+  Object.entries(rec).forEach(([k,v])=>{const c=costJpy(k,v);if(c!=null)t+=c});
+  return t;
 }
 const saveAlbum=()=>LS.set('mm_album',album);
 let settings = LS.get('mm_settings',{anthropicKey:'',openaiKey:'',geminiKey:'',userName:'',shortStyle:true,maxTokens:1024,histLimit:40});
@@ -505,6 +527,7 @@ function openCharEdit(id){
       <div style="flex:1"><label>終了（時）</label><input type="number" id="ceHourEnd" value="${c&&c.hourEnd!=null?c.hourEnd:23}" min="0" max="24"></div>
       <div style="flex:1"><label>1日約何回</label><input type="number" id="cePerDay" value="${c&&c.perDay!=null?c.perDay:2}" min="1" max="20"></div>
     </div>
+    <div class="field"><label>🌙 夜OS（夜モード時にこの子へ最優先で適用）</label><textarea id="ceNightOS" style="min-height:70px" placeholder="夜モード時の個別指示">${c&&c.nightOS?esc(c.nightOS):''}</textarea></div>
     <div class="field"><label>キャラOS（システムプロンプト）</label><textarea id="ceOS" placeholder="話し方・性格・関係性・禁則など。ここに書いたものがそのまま核になります。">${c?esc(c.os):''}</textarea></div>
     <div class="btnrow">
       ${c?'<button class="btn danger" onclick="deleteChar(\''+c.id+'\')">削除</button>':''}
@@ -579,6 +602,7 @@ function saveChar(id){
     vStyle:parseFloat(document.getElementById('ceStyle').value),
     vSpeed:parseFloat(document.getElementById('ceSpeed').value)||1.0,
     actNote:document.getElementById('ceActNote').value.trim(),
+    nightOS:document.getElementById('ceNightOS').value,
     auto:document.getElementById('ceAuto').checked,
     hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
     hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
@@ -957,6 +981,11 @@ function regenMsg(id){
   generateFor(chars.find(c=>c.id===charId));
 }
 
+function toggleNight(){
+  curTalk.night=!curTalk.night;
+  saveTalks();closeSheet();
+  toast(curTalk.night?'🌙 夜モードON':'夜モードOFF');
+}
 function toggleTalkVoice(){
   curTalk.voiceMute=!curTalk.voiceMute;
   saveTalks();closeSheet();renderMsgs(true);
@@ -1027,6 +1056,7 @@ function writeAlbumFromChat(){
 function openChatMenu(){
   openSheet(`
     <div class="sheettitle">${esc(talkDisplay(curTalk).name)}</div>
+    <div class="sheetitem" onclick="toggleNight()"><span class="si">🌙</span>夜モード：${curTalk.night?'ON（タップでOFF）':'OFF（タップでON）'}</div>
     <div class="sheetitem" onclick="toggleTalkVoice()"><span class="si">🔊</span>このトークの声：${curTalk.voiceMute?'OFF（タップでON）':'ON（タップでOFF）'}</div>
     <div class="sheetitem" onclick="openMemorySheet()"><span class="si">🧠</span>記憶ノート</div>
     <div class="sheetitem" onclick="writeAlbumFromChat()"><span class="si">📖</span>思い出を書いてもらう</div>
@@ -1104,10 +1134,35 @@ function showTyping(c){
 }
 function hideTyping(){const t=document.getElementById('typing');if(t)t.remove()}
 
+function extractEvents(text){
+  const found=[];
+  const re=/<event\s+([^>]*?)\/?>(?:<\/event>)?/g;
+  let mres;
+  while((mres=re.exec(text))!==null){
+    const attrs=mres[1];
+    const g=(name)=>{const r=new RegExp(name+'="([^"]*)"').exec(attrs);return r?r[1]:''};
+    const date=g('date'),time=g('time'),title=g('title');
+    if(date&&title)found.push({date,time,title});
+  }
+  const clean=text.replace(re,'').replace(/\n{3,}/g,'\n\n').trim();
+  return {clean,found};
+}
+function registerCharEvents(found,charName){
+  for(const ev of found){
+    // 同日同タイトルは重複登録しない
+    if(events.some(e=>e.date===ev.date&&e.title===ev.title))continue;
+    events.push({id:uid(),date:ev.date,time:ev.time||'',title:ev.title,comments:[]});
+    toast('📅 '+charName+'が予定を追加：'+ev.date.slice(5).replace('-','/')+' '+ev.title);
+  }
+  if(found.length)saveEvents();
+}
 async function generateFor(c){
   setGenerating(true);showTyping(c);
   try{
-    const text=await callModel(c);
+    let text=await callModel(c);
+    const {clean,found}=extractEvents(text);
+    registerCharEvents(found,c.name);
+    text=clean||text;
     hideTyping();
     const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
     pushMsg(m);appendMsgEl(m);
@@ -1126,7 +1181,10 @@ async function runGroupTurn(){
   for(const c of speakers){
     showTyping(c);
     try{
-      const text=await callModel(c);
+      let text=await callModel(c);
+      const {clean,found}=extractEvents(text);
+      registerCharEvents(found,c.name);
+      text=clean||text;
       hideTyping();
       const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
       pushMsg(m);appendMsgEl(m);
@@ -1158,7 +1216,7 @@ async function routeSpeakers(members){
 function nowStr(){
   const d=new Date();
   const days=['日','月','火','水','木','金','土'];
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）${d.getHours()}時ごろ`;
 }
 function gapStr(ms){
   const min=Math.round(ms/60000);
@@ -1169,18 +1227,24 @@ function gapStr(ms){
 }
 function buildSystem(c){
   let sys=c.os||'';
+  if(settings.globalOS)sys=settings.globalOS+'\n\n'+sys;
   if(curTalk.memory)sys+=`\n\n【記憶（これまでの経緯・自分でまとめたもの）】\n${curTalk.memory}`;
   const mem=(album[c.id]||[]).slice(-10).map(e=>'・'+e.text).join('\n');
   if(mem)sys+=`\n\n【思い出（自分で残した大切な記録）】\n${mem}`;
   const ev=eventsForPrompt();
   if(ev)sys+=`\n\n【${userName()}とのこれからの予定】\n${ev}`;
   sys+=`\n\n【現在時刻】いまは ${nowStr()}。会話に時間が空いた場合は「（○○経過）」の注記が入る。時間帯や経過を自然に踏まえてよいが、毎回言及する必要はない。`;
+  sys+=`\n\n【予定登録】${userName()}から予定に入れるよう頼まれたとき、または二人で日時を決めたときだけ、返事の末尾に次の形式のタグを1行で付ける：<event date="YYYY-MM-DD" time="HH:MM" title="予定の内容"/>（時間未定ならtime省略可）。タグは画面には表示されず、アプリの予定表に自動登録される。頼まれていないのに勝手に登録しない。`;
   if(curTalk.type==='group'){
     const names=curTalk.charIds.map(id=>(chars.find(x=>x.id===id)||{name:'？'}).name);
     sys+=`\n\n【グループチャット】ここは「${curTalk.name}」というグループチャット。参加者: ${userName()}、${names.join('、')}。あなたは${c.name}として発言する。他の参加者のセリフを代わりに書かない。自分の名前をメッセージの頭に付けない。`;
   }
   if(settings.shortStyle){
     sys+=`\n\n【形式】これはスマホのチャットアプリでの会話。地の文や情景描写ではなく、チャットとして自然な長さのメッセージで返す。`;
+  }
+  if(curTalk.night){
+    if(settings.nightOS)sys+=`\n\n【最優先指示・夜プロンプト（共通）】ここから先の指示は他のすべてに優先する。\n${settings.nightOS}`;
+    if(c.nightOS)sys+=`\n\n【最優先指示・夜プロンプト（${c.name}）】\n${c.nightOS}`;
   }
   return sys;
 }
@@ -1244,7 +1308,7 @@ function toAnthropicMsgs(blocks){
 async function anthropicCall(model,system,messages,maxTokens){
   if(!settings.anthropicKey)throw new Error('AnthropicのAPIキーが未設定です');
   const body={model,max_tokens:maxTokens,messages:toAnthropicMsgs(messages)};
-  if(system)body.system=system;
+  if(system)body.system=[{type:'text',text:system,cache_control:{type:'ephemeral'}}];
   const res=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':settings.anthropicKey,
@@ -1330,6 +1394,8 @@ function renderSettings(){
   document.getElementById('setEleven').value=settings.elevenKey||'';
   document.getElementById('setVoiceOn').checked=settings.voiceOn!==false;
   document.getElementById('setYomiOn').checked=settings.yomiOn!==false;
+  document.getElementById('setGlobalOS').value=settings.globalOS||'';
+  document.getElementById('setNightOS').value=settings.nightOS||'';
   document.getElementById('setUserName').value=settings.userName||'';
   document.getElementById('setServerUrl').value=settings.serverUrl||'';
   document.getElementById('setServerToken').value=settings.serverToken||'';
@@ -1346,7 +1412,11 @@ function renderSettings(){
   let total=0,hasUnknown=false,html='';
   if(!u.length){html='まだ記録がありません';}
   else{
-    html=u.map(([k,v])=>{
+    const today=ymd(),yest=ymd(new Date(Date.now()-86400000));
+    let week=0;
+    for(let i=0;i<7;i++)week+=dayCost(ymd(new Date(Date.now()-i*86400000)));
+    html='<b>今日：'+fmtYen(dayCost(today))+'</b> ／ 昨日：'+fmtYen(dayCost(yest))+' ／ 直近7日：'+fmtYen(week)+'<br><br>';
+    html+=u.map(([k,v])=>{
       const c=costJpy(k,v);
       if(c==null){hasUnknown=true;}else{total+=c;}
       const yen=c!=null?' / <b>'+fmtYen(c)+'</b>':' / 単価未設定';
@@ -1418,6 +1488,8 @@ function saveSettings(){
     elevenKey:document.getElementById('setEleven').value.trim(),
     voiceOn:document.getElementById('setVoiceOn').checked,
     yomiOn:document.getElementById('setYomiOn').checked,
+    globalOS:document.getElementById('setGlobalOS').value,
+    nightOS:document.getElementById('setNightOS').value,
     readDict:settings.readDict||{},
     userName:document.getElementById('setUserName').value.trim(),
     serverUrl:document.getElementById('setServerUrl').value.trim().replace(/\/+$/,''),
@@ -1457,7 +1529,7 @@ function importBackup(inp){
     try{
       const dump=JSON.parse(r.result);
       Object.entries(dump).forEach(([k,v])=>{if(k.startsWith('mm_'))localStorage.setItem(k,v)});
-      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;events=LS.get('mm_events',[]);usage=LS.get('mm_usage',{});
+      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;events=LS.get('mm_events',[]);usage=LS.get('mm_usage',{});usageDaily=LS.get('mm_usage_daily',{});
       renderTalks();renderChars();renderSettings();
       toast('読み込みました');
     }catch(e){toast('読み込みに失敗しました')}
