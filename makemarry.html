@@ -123,6 +123,11 @@ img{display:block}
 .vplay{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 1px 3px rgba(43,39,51,.15);
   font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;align-self:center}
 .vplay:active{background:var(--accent-soft)}
+.keyrow{display:flex;gap:6px;align-items:center}
+.keyrow input{flex:1;min-width:0}
+.keybtn{width:38px;height:38px;border-radius:9px;background:var(--bg);border:1px solid var(--line);
+  font-size:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.keybtn:active{background:var(--accent-soft)}
 #inputbar{
   background:var(--surface);border-top:1px solid var(--line);
   padding:8px 10px calc(8px + var(--sab));display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
@@ -230,11 +235,11 @@ img{display:block}
   <div class="list">
     <div class="settsec">
       <div class="sechead">APIキー</div>
-      <div class="field"><label>Anthropic（Claude）</label><input type="password" id="setAnthropic" placeholder="sk-ant-..."></div>
-      <div class="field"><label>OpenAI（GPT）</label><input type="password" id="setOpenai" placeholder="sk-..."></div>
-      <div class="field"><label>Google（Gemini）</label><input type="password" id="setGemini" placeholder="AIza..."></div>
-      <div class="field"><label>xAI（Grok）</label><input type="password" id="setXai" placeholder="xai-..."></div>
-      <div class="field"><label>ElevenLabs（声）</label><input type="password" id="setEleven" placeholder="xi-... または sk_..."></div>
+      <div class="field"><label>Anthropic（Claude）</label><div class="keyrow"><input type="password" id="setAnthropic" placeholder="sk-ant-..."><button class="keybtn" onclick="toggleKey('setAnthropic',this)">👁</button><button class="keybtn" onclick="copyKey('setAnthropic')">📋</button></div></div>
+      <div class="field"><label>OpenAI（GPT）</label><div class="keyrow"><input type="password" id="setOpenai" placeholder="sk-..."><button class="keybtn" onclick="toggleKey('setOpenai',this)">👁</button><button class="keybtn" onclick="copyKey('setOpenai')">📋</button></div></div>
+      <div class="field"><label>Google（Gemini）</label><div class="keyrow"><input type="password" id="setGemini" placeholder="AIza..."><button class="keybtn" onclick="toggleKey('setGemini',this)">👁</button><button class="keybtn" onclick="copyKey('setGemini')">📋</button></div></div>
+      <div class="field"><label>xAI（Grok）</label><div class="keyrow"><input type="password" id="setXai" placeholder="xai-..."><button class="keybtn" onclick="toggleKey('setXai',this)">👁</button><button class="keybtn" onclick="copyKey('setXai')">📋</button></div></div>
+      <div class="field"><label>ElevenLabs（声）</label><div class="keyrow"><input type="password" id="setEleven" placeholder="xi-... または sk_..."><button class="keybtn" onclick="toggleKey('setEleven',this)">👁</button><button class="keybtn" onclick="copyKey('setEleven')">📋</button></div></div>
       <div class="checkrow"><input type="checkbox" id="setVoiceOn" checked><label for="setVoiceOn" style="font-size:14px">声の読み上げ機能を使う（吹き出しに🔊が出ます）</label></div>
       <div class="checkrow"><input type="checkbox" id="setYomiOn" checked><label for="setYomiOn" style="font-size:14px">読み上げ時に漢字を自動でふりがな化する（誤読対策）</label></div>
       <div class="sheetitem" onclick="editReadDict()"><span class="si">📖</span>読み方辞書（固有名詞の読みを登録）</div>
@@ -262,7 +267,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">サーバー接続（Phase 3）</div>
       <div class="field"><label>サーバーURL</label><input type="text" id="setServerUrl" placeholder="https://xxx.workers.dev"></div>
-      <div class="field"><label>合言葉（MM_TOKEN）</label><input type="password" id="setServerToken"></div>
+      <div class="field"><label>合言葉（MM_TOKEN）</label><div class="keyrow"><input type="password" id="setServerToken" placeholder=""><button class="keybtn" onclick="toggleKey('setServerToken',this)">👁</button><button class="keybtn" onclick="copyKey('setServerToken')">📋</button></div></div>
       <div class="sheetitem" onclick="subscribePush()"><span class="si">🤝</span>プッシュ購読を登録する</div>
       <div class="sheetitem" onclick="syncConfig()"><span class="si">🔄</span>キャラ設定をサーバーに同期</div>
       <div class="sheetitem" onclick="serverTestPush()"><span class="si">📮</span>サーバー経由のテスト通知</div>
@@ -278,7 +283,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v4.1</div>
+      <div class="note">Makemarry v4.2</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -527,6 +532,7 @@ function openCharEdit(id){
       <div style="flex:1"><label>終了（時）</label><input type="number" id="ceHourEnd" value="${c&&c.hourEnd!=null?c.hourEnd:23}" min="0" max="24"></div>
       <div style="flex:1"><label>1日約何回</label><input type="number" id="cePerDay" value="${c&&c.perDay!=null?c.perDay:2}" min="1" max="20"></div>
     </div>
+    <div class="field"><label>朝の保証枠（この時台に必ず1通。空なら無し。例: 8）</label><input type="number" id="ceMorning" value="${c&&c.morningHour!=null?c.morningHour:''}" min="0" max="23" placeholder="なし"></div>
     <div class="field"><label>🌙 夜OS（夜モード時にこの子へ最優先で適用）</label><textarea id="ceNightOS" style="min-height:70px" placeholder="夜モード時の個別指示">${c&&c.nightOS?esc(c.nightOS):''}</textarea></div>
     <div class="field"><label>キャラOS（システムプロンプト）</label><textarea id="ceOS" placeholder="話し方・性格・関係性・禁則など。ここに書いたものがそのまま核になります。">${c?esc(c.os):''}</textarea></div>
     <div class="btnrow">
@@ -607,6 +613,7 @@ function saveChar(id){
     hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
     hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
     perDay:parseInt(document.getElementById('cePerDay').value)||2,
+    morningHour:document.getElementById('ceMorning').value===''?null:parseInt(document.getElementById('ceMorning').value),
     provider:document.getElementById('ceProvider').value,
     model:(document.getElementById('ceModelSel').value==='__custom__'?document.getElementById('ceModel').value.trim():document.getElementById('ceModelSel').value),
     os:document.getElementById('ceOS').value
@@ -1411,6 +1418,18 @@ async function geminiCall(model,system,messages,maxTokens){
 }
 
 /* ================= 設定 ================= */
+function toggleKey(id,btn){
+  const inp=document.getElementById(id);
+  inp.type=inp.type==='password'?'text':'password';
+  btn.textContent=inp.type==='password'?'👁':'🙈';
+}
+function copyKey(id){
+  const inp=document.getElementById(id);
+  if(!inp.value){toast('空です');return}
+  navigator.clipboard.writeText(inp.value).then(()=>toast('コピーしました')).catch(()=>{
+    const t=inp.type;inp.type='text';inp.select();document.execCommand('copy');inp.type=t;toast('コピーしました');
+  });
+}
 function renderSettings(){
   document.getElementById('setAnthropic').value=settings.anthropicKey||'';
   document.getElementById('setOpenai').value=settings.openaiKey||'';
@@ -1851,6 +1870,7 @@ async function syncConfig(){
         hourStart:c.hourStart!=null?c.hourStart:8,
         hourEnd:c.hourEnd!=null?c.hourEnd:23,
         perDay:c.perDay!=null?c.perDay:2,
+        morningHour:c.morningHour!=null?c.morningHour:null,
         minGapHours:3
       }))
     };
