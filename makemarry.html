@@ -283,7 +283,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v4.3</div>
+      <div class="note">Makemarry v4.3.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -620,7 +620,13 @@ function saveChar(id){
   };
   if(id){Object.assign(chars.find(c=>c.id===id),data)}
   else{chars.push(Object.assign({id:uid()},data))}
-  saveChars();renderChars();closeSheet();toast('保存しました');
+  saveChars();renderChars();closeSheet();
+  if(serverReady()){
+    syncConfig().then(()=>{}).catch(()=>{});
+    toast('保存しました（サーバーにも自動同期）');
+  }else{
+    toast('保存しました');
+  }
 }
 function deleteChar(id){
   if(!confirm('このキャラと個別トークを削除します。よろしいですか？'))return;
