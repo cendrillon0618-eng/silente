@@ -307,6 +307,10 @@ function load(){
     if(!s.defaultProvider) s.defaultProvider="anthropic";
     if(!s.imageProvider) s.imageProvider="gemini";
     if(!s.openaiImageModel) s.openaiImageModel="gpt-image-2";
+    if(s.xaiKey===undefined) s.xaiKey="";
+    if(s.elevenKey===undefined) s.elevenKey="";
+    if(s.readDictText===undefined) s.readDictText="";
+    if(s.mmOn===undefined){ s.mmOn=false; s.mmUrl=""; s.mmToken=""; s.mmCache=null; }
     const aoi=s.presets.find(p=>p.id==="p_aoi");
     if(aoi && aoi.name==="🌙 葵") aoi.name="🩵 葵";
     return s;
@@ -328,6 +332,7 @@ function resolveModel(c){
   }
   if(!model){
     if(prov==="openai") model="gpt-5.6";
+    else if(prov==="grok") model="grok-4-1-fast-non-reasoning";
     else if(prov==="gemini") model="gemini-2.5-flash";
     else model=(S.defaultProvider==="anthropic"&&S.model)?S.model:"claude-sonnet-4-6";
   }
@@ -554,6 +559,19 @@ function msgEl(m,idx){
       setTimeout(()=>sv.textContent="📁保存",2000);
     };
     tools.append(sv);
+    if(idx>=0){
+      const ed=document.createElement("button"); ed.textContent="✏️";
+      ed.onclick=()=>editMessage(idx);
+      tools.append(ed);
+    }
+    if(S.voiceOn!==false && S.elevenKey && p.voiceId){
+      const vp=document.createElement("button"); vp.textContent="🔊";
+      vp.onclick=()=>playEleven(m,p,vp);
+      tools.append(vp);
+      const vs=document.createElement("button"); vs.textContent="🎧保存";
+      vs.onclick=()=>shareElevenMp3(m,p);
+      tools.append(vs);
+    }
     const fv=document.createElement("button"); fv.textContent="🩷";
     fv.onclick=()=>{
       S.favorites.push({id:uid(),text:m.content,who:p.name,convo:(cur()||{}).title||"",date:todayStr()});
@@ -618,6 +636,16 @@ function buildSystem(c){
     if((sec.text||"").trim()) mem += "\n■"+sec.title+"\n"+sec.text.trim()+"\n";
   });
   if(mem) sys += "【長期メモリ（過去の会話から引き継いだ記憶）】"+mem+"\n";
+  if(S.mmOn && S.mmCache && S.mmCache.chars){
+    const mmc=(S.mmCache.chars||[]).find(ch=>ch.name && p.name.includes(ch.name));
+    if(mmc){
+      let mmt="";
+      if(S.mmCache.events) mmt+="\n■これからの予定\n"+S.mmCache.events+"\n";
+      if(mmc.memory) mmt+="\n■Makemarry（LINE風アプリ）でのあなたの記憶\n"+mmc.memory+"\n";
+      if((mmc.album||[]).length) mmt+="\n■あなたがMakemarryで残した思い出\n"+mmc.album.map(a=>"・"+a).join("\n")+"\n";
+      if(mmt) sys += "【Makemarryから同期された記憶（あちらでの近況・地続きの関係として扱う）】"+mmt+"\n";
+    }
+  }
   sys += (p.systemPrompt||"").trim();
   const on = S.knowledge.filter(k=>(p.knowledgeIds||[]).includes(k.id));
   if(on.length){
@@ -796,17 +824,17 @@ async function callAPI(){
   try{
     const p=presetOf(c);
     const rm=resolveModel(c);
-    const isOA=(rm.prov==="openai"), isGM=(rm.prov==="gemini");
+    const isOA=(rm.prov==="openai"), isGM=(rm.prov==="gemini"), isXA=(rm.prov==="grok");
     let sysText=buildSystem(c);
     const maxT=Number((c.ovr||{}).maxTokens)||Number(p.maxTokens)||Number(S.maxTokens)||4096;
-    const thinkOn = S.showThoughts && !isOA && (isGM || maxT>=2048);
+    const thinkOn = S.showThoughts && !isOA && !isXA && (isGM || maxT>=2048);
     if(thinkOn && sysText) sysText+="\n\n（内部の思考も日本語で行うこと）";
     let url,headers,payload;
-    if(isOA){
-      url="https://api.openai.com/v1/chat/completions";
+    if(isOA||isXA){
+      url=isXA?"https://api.x.ai/v1/chat/completions":"https://api.openai.com/v1/chat/completions";
       headers={
         "content-type":"application/json",
-        "authorization":"Bearer "+S.openaiKey
+        "authorization":"Bearer "+(isXA?(S.xaiKey||""):S.openaiKey)
       };
       payload={
         model:rm.model,
@@ -816,7 +844,8 @@ async function callAPI(){
         messages:toOpenAIMessages(c,sysText)
       };
       const rz=reasonOf(c);
-      if(rz) payload.reasoning_effort=rz;
+      if(rz&&isOA) payload.reasoning_effort=rz;
+      if(isXA){ payload.max_tokens=maxT; delete payload.max_completion_tokens; }
     }else if(isGM){
       url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(rm.model)+":streamGenerateContent?alt=sse";
       headers={
@@ -1037,6 +1066,114 @@ function setStreamUI(on){
 function openDrawer(){ drawerEl.classList.add("on"); overlayEl.classList.add("on"); }
 function closeDrawer(){ drawerEl.classList.remove("on"); overlayEl.classList.remove("on"); }
 
+/* ============ Makemarry連携 ============ */
+async function fetchMMShared(show){
+  try{
+    const res=await fetch(S.mmUrl.replace(/\/+$/,"")+"/shared",{headers:{"x-mm-token":S.mmToken}});
+    const data=await res.json();
+    if(data && data.chars){
+      S.mmCache=data; save();
+      if(show) alert("Makemarryと同期したよ（"+(data.chars||[]).length+"キャラぶんの記憶・予定を取得）");
+    }else if(show){
+      alert("接続はできたけど共有データが空みたい。Makemarry側で「🔄同期」を押してから、もう一度保存してみて。");
+    }
+  }catch(e){ if(show) alert("Makemarry連携エラー: "+e.message); }
+}
+
+/* ============ ElevenLabs キャラ声 ============ */
+const elCache={};
+let elAudio=null;
+function parseRDict(){
+  const d={};
+  (S.readDictText||"").split("\n").forEach(l=>{
+    const m=l.split(/[＝=]/);
+    if(m.length>=2&&m[0].trim()&&m[1].trim()) d[m[0].trim()]=m[1].trim();
+  });
+  return d;
+}
+function applyRDict(t){
+  const d=parseRDict();
+  Object.keys(d).sort((a,b)=>b.length-a.length).forEach(k=>{ t=t.split(k).join(d[k]); });
+  return t;
+}
+async function haikuReading(text,useTags,actNote){
+  text=applyRDict(text);
+  if(!S.apiKey) return text;
+  const d=parseRDict();
+  const dictNote=Object.keys(d).length?"\n固有名詞の読み: "+Object.entries(d).map(([k,v])=>k+"="+v).join("、"):"";
+  const actLine=(useTags&&actNote)?"\n- このキャラの演技指針："+actNote:"";
+  const tagRules=useTags
+    ? "\n- セリフの感情を読み取り、効果的な位置に英語の演技タグを挿入してよい（1メッセージ0〜3個）\n- 使えるタグ例: [whispers] [sighs] [laughs softly] [laughs] [angry] [sad] [excited] [curious]\n- 「……」や余韻には <break time=\"0.7s\" /> を使う（長い沈黙は1.0s）\n- 例外：「（笑）」「(笑)」・絵文字・顔文字は読み上げ原稿からは取り除く（[laughs softly]等に置き換えてよい）"+actLine
+    : "\n- 「……」や余韻には <break time=\"0.7s\" /> を挿入してよい\n- 例外：「（笑）」「(笑)」・絵文字・顔文字は読み上げ原稿からは取り除く";
+  const prompt="あなたは音声演出の専門家です。次のセリフを、音声読み上げ（ElevenLabs）用の原稿に変換してください。\nルール：\n- 言葉そのものは一切変えない・省略しない・言い足さない\n- 漢字は全てひらがなに変換する\n- 区切りの半角スペースは「自然なイントネーションのまとまり」ごとに入れる。文節の途中や複合語の中で切らない。刻みすぎない\n- 句読点・！？・改行はそのまま残す"+tagRules+dictNote+"\n- 変換結果だけを出力する\n\nセリフ：\n"+text;
+  const res=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"content-type":"application/json","x-api-key":S.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1500,messages:[{role:"user",content:prompt}]})
+  });
+  const data=await res.json();
+  if(!res.ok) throw new Error(data.error?data.error.message:res.status);
+  return data.content.filter(b=>b.type==="text").map(b=>b.text).join("").trim()||text;
+}
+async function elevenBlob(m,p){
+  const key=[p.voiceId,p.voiceModel||"eleven_v3",p.vStability??0.4,p.vStyle??0.4,p.vSpeed??1.0,p.actNote||"",m.content].join("|");
+  if(elCache[key]) return elCache[key];
+  let speak=m.content;
+  if(/[\u4e00-\u9faf]/.test(speak)){
+    try{ speak=await haikuReading(speak,(p.voiceModel||"eleven_v3")==="eleven_v3",p.actNote); }catch(e){}
+  }else{
+    speak=applyRDict(speak);
+  }
+  const res=await fetch("https://api.elevenlabs.io/v1/text-to-speech/"+encodeURIComponent(p.voiceId),{
+    method:"POST",
+    headers:{"xi-api-key":S.elevenKey,"content-type":"application/json"},
+    body:JSON.stringify({
+      text:speak,
+      model_id:p.voiceModel||"eleven_v3",
+      voice_settings:{
+        stability:p.vStability!=null?p.vStability:0.4,
+        similarity_boost:0.8,
+        style:p.vStyle!=null?p.vStyle:0.4,
+        use_speaker_boost:true,
+        speed:p.vSpeed!=null?p.vSpeed:1.0
+      }
+    })
+  });
+  if(!res.ok){
+    let msg="HTTP "+res.status;
+    try{ const d=await res.json(); msg=d.detail?(d.detail.message||JSON.stringify(d.detail)):msg; }catch(e){}
+    throw new Error(msg);
+  }
+  const blob=await res.blob();
+  elCache[key]=blob;
+  return blob;
+}
+async function playEleven(m,p,btn){
+  const t0=btn?btn.textContent:"";
+  if(btn) btn.textContent="⏳";
+  try{
+    const blob=await elevenBlob(m,p);
+    if(elAudio) elAudio.pause();
+    elAudio=new Audio(URL.createObjectURL(blob));
+    elAudio.play();
+  }catch(e){ alert("声の生成エラー: "+e.message); }
+  if(btn) btn.textContent=t0;
+}
+async function shareElevenMp3(m,p){
+  try{
+    const blob=await elevenBlob(m,p);
+    const d=new Date();
+    const name=(p.name||"voice").replace(/[^ぁ-んァ-ン一-龯a-zA-Z0-9]/g,"")+"_"+d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0")+"_"+String(d.getHours()).padStart(2,"0")+String(d.getMinutes()).padStart(2,"0")+".mp3";
+    const file=new File([blob],name,{type:"audio/mpeg"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file]});
+    }else{
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(blob); a.download=name; a.click();
+    }
+  }catch(e){ if(e.name!=="AbortError") alert("保存エラー: "+e.message); }
+}
+
 /* ============ sheets ============ */
 function openSheet(html){ sheetEl.innerHTML=html; sheetWrap.classList.add("on"); }
 function closeSheet(){ sheetWrap.classList.remove("on"); sheetEl.innerHTML=""; }
@@ -1048,7 +1185,8 @@ function openSettings(){
   const opts=
     '<optgroup label="Claude">'+MODELS.map(([v,l])=>gOpt("anthropic|"+v,l)).join("")+'</optgroup>'
     +'<optgroup label="GPT">'+[["gpt-5.6","GPT-5.6（最新・最上位）"],["gpt-5.6-terra","GPT-5.6 Terra（バランス）"],["gpt-5.5","GPT-5.5"],["gpt-5.4","GPT-5.4"],["gpt-4o","GPT-4o"]].map(([v,l])=>gOpt("openai|"+v,l)).join("")+'</optgroup>'
-    +'<optgroup label="Gemini">'+[["gemini-2.5-pro","Gemini 2.5 Pro"],["gemini-2.5-flash","Gemini 2.5 Flash"]].map(([v,l])=>gOpt("gemini|"+v,l)).join("")+'</optgroup>';
+    +'<optgroup label="Gemini">'+[["gemini-3.5-flash","Gemini 3.5 Flash（最新）"],["gemini-3.1-pro-preview","Gemini 3.1 Pro"],["gemini-2.5-pro","Gemini 2.5 Pro"],["gemini-2.5-flash","Gemini 2.5 Flash"]].map(([v,l])=>gOpt("gemini|"+v,l)).join("")+'</optgroup>'
+    +'<optgroup label="Grok">'+[["grok-4.5","Grok 4.5（最新）"],["grok-4.3","Grok 4.3"],["grok-4-1-fast-non-reasoning","Grok 4.1 Fast"],["grok-4-1-fast-reasoning","Grok 4.1 Fast 思考型"]].map(([v,l])=>gOpt("grok|"+v,l)).join("")+'</optgroup>';
   openSheet(`
     <h3>設定</h3>
     <div class="field"><label>Claude APIキー</label>
@@ -1083,6 +1221,20 @@ function openSettings(){
     <div class="field"><label>読み方の演技指示</label>
       <textarea id="fTtsI" style="min-height:70px" placeholder="例：低く落ち着いた大人の男性の声。静かで、少し甘く、ささやくように。">${esc(S.ttsInstructions||"")}</textarea>
       <div class="hint">🩷お気に入りの🔊で使われる。声質・トーン・速さを日本語で指示できるよ。OpenAIキーが必要。</div></div>
+    <div class="field"><label>xAI APIキー（Grokの部屋用）</label>
+      <input type="password" id="fXKey" value="${escAttr(S.xaiKey||"")}" placeholder="xai-...">
+      <div class="hint">console.x.ai で発行。前払いクレジットが必要。</div></div>
+    <div class="field"><label>ElevenLabs APIキー（キャラ声）</label>
+      <input type="password" id="fEKey" value="${escAttr(S.elevenKey||"")}" placeholder="sk_... / xi-...">
+      <div class="hint">部屋ごとのVoice ID（🍰プリセット編集）と合わせると、返信の下に🔊が出て本人の声で聴ける。Makemarryと同じキー・同じ声が使えるよ。</div></div>
+    <div class="field"><label>読み方辞書（読み上げの誤読対策）</label>
+      <textarea id="fRDict" style="min-height:70px" placeholder="奏音＝かのん&#10;灯＝ともり&#10;遙＝はるか">${esc(S.readDictText||"")}</textarea>
+      <div class="hint">1行「単語＝よみ」。読み上げ時は漢字を自動でふりがな化（Haiku清書）してから声にするよ。</div></div>
+    <div class="field"><label>Makemarry連携</label>
+      <div class="optRow"><span>共有記憶を読み込む</span><div class="toggle ${S.mmOn?"on":""}" id="fMMOn"></div></div>
+      <input type="text" id="fMMUrl" value="${escAttr(S.mmUrl||"")}" placeholder="https://xxx.workers.dev" style="margin-top:8px">
+      <input type="password" id="fMMToken" value="${escAttr(S.mmToken||"")}" placeholder="合言葉（MM_TOKEN）" style="margin-top:8px">
+      <div class="hint">部屋の名前にキャラ名（葵・灯など）が含まれる部屋にだけ、Makemarryでの記憶・思い出・予定が注入される。執筆の部屋には入らないよ。保存すると同期を試すね。</div></div>
     <div class="field"><label>システムプロンプト</label>
       <div class="hint" style="margin-top:0">プリセットごとに設定するようになったよ。メニュー☰ → 🍰 プリセット編集 からどうぞ。</div></div>
     <div class="field"><label>機能</label>
@@ -1118,6 +1270,7 @@ function openSettings(){
   $("#fCompact").onclick=()=>$("#fCompact").classList.toggle("on");
   $("#fMorn").onclick=()=>$("#fMorn").classList.toggle("on");
   $("#fThink").onclick=()=>$("#fThink").classList.toggle("on");
+  $("#fMMOn").onclick=()=>$("#fMMOn").classList.toggle("on");
   $("#fSave").onclick=()=>{
     S.apiKey=$("#fKey").value.trim();
     const dm=$("#fModel").value.split("|");
@@ -1126,6 +1279,12 @@ function openSettings(){
     S.maxTokens=Number($("#fMax").value)||4096;
     S.geminiKey=$("#fGKey").value.trim();
     S.openaiKey=$("#fOKey").value.trim();
+    S.xaiKey=$("#fXKey").value.trim();
+    S.elevenKey=$("#fEKey").value.trim();
+    S.readDictText=$("#fRDict").value;
+    S.mmOn=$("#fMMOn").classList.contains("on");
+    S.mmUrl=$("#fMMUrl").value.trim().replace(/\/+$/,"");
+    S.mmToken=$("#fMMToken").value.trim();
     S.geminiImageModel=$("#fGModel").value.trim()||"gemini-2.5-flash-image";
     S.openaiImageModel=$("#fOImg").value.trim()||"gpt-image-2";
     S.ttsVoice=$("#fTtsV").value;
@@ -1139,6 +1298,7 @@ function openSettings(){
       endHour:Math.min(23,Math.max(0,Number($("#fMornE").value)||15))
     };
     save(); renderAll(); closeSheet();
+    if(S.mmOn&&S.mmUrl&&S.mmToken) fetchMMShared(true);
   };
   $("#fClose").onclick=closeSheet;
   $("#fExport").onclick=exportData;
@@ -1152,7 +1312,7 @@ function exportData(){
   let out=S;
   if(!withKeys){
     out=JSON.parse(JSON.stringify(S));
-    out.apiKey=""; out.openaiKey=""; out.geminiKey="";
+    out.apiKey=""; out.openaiKey=""; out.geminiKey=""; out.xaiKey=""; out.elevenKey=""; out.mmToken="";
   }
   const blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
   const a=document.createElement("a");
@@ -1411,6 +1571,7 @@ function editPreset(id){
         <option value="anthropic" ${p.provider==="anthropic"?"selected":""}>Claude（Anthropic）</option>
         <option value="openai" ${p.provider==="openai"?"selected":""}>GPT（OpenAI）</option>
         <option value="gemini" ${p.provider==="gemini"?"selected":""}>Gemini（Google）</option>
+        <option value="grok" ${p.provider==="grok"?"selected":""}>Grok（xAI）</option>
       </select></div>
     <div class="field" id="rowModelA" style="${p.provider==="anthropic"?"":"display:none"}"><label>モデル（Claude）</label><select id="pModel">${opts}</select></div>
     <div class="field" id="rowModelO" style="${p.provider==="openai"?"":"display:none"}"><label>モデル（GPT）</label>
@@ -1437,11 +1598,36 @@ function editPreset(id){
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="pChip" data-fill="pModelG" data-v="gemini-2.5-pro" style="flex:none;padding:7px 12px;font-size:12px">2.5-pro</button>
         <button class="pChip" data-fill="pModelG" data-v="gemini-2.5-flash" style="flex:none;padding:7px 12px;font-size:12px">2.5-flash</button>
+        <button class="pChip" data-fill="pModelG" data-v="gemini-3.1-pro-preview" style="flex:none;padding:7px 12px;font-size:12px">3.1-pro</button>
+        <button class="pChip" data-fill="pModelG" data-v="gemini-3.5-flash" style="flex:none;padding:7px 12px;font-size:12px">3.5-flash</button>
+      </div>
+      <div class="hint">チップをタップで入力、自由入力もOK。</div></div>
+    <div class="field" id="rowModelX" style="${p.provider==="grok"?"":"display:none"}"><label>モデル（Grok）</label>
+      <input type="text" id="pModelX" value="${escAttr(p.provider==="grok"?(p.model||"grok-4-1-fast-non-reasoning"):"grok-4-1-fast-non-reasoning")}">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pChip" data-fill="pModelX" data-v="grok-4-1-fast-non-reasoning" style="flex:none;padding:7px 12px;font-size:12px">4.1-fast</button>
+        <button class="pChip" data-fill="pModelX" data-v="grok-4-1-fast-reasoning" style="flex:none;padding:7px 12px;font-size:12px">4.1-思考型</button>
+        <button class="pChip" data-fill="pModelX" data-v="grok-4.3" style="flex:none;padding:7px 12px;font-size:12px">grok-4.3</button>
+        <button class="pChip" data-fill="pModelX" data-v="grok-4.5" style="flex:none;padding:7px 12px;font-size:12px">grok-4.5</button>
       </div>
       <div class="hint">チップをタップで入力、自由入力もOK。</div></div>
     <div class="field"><label>最大出力の長さ（トークン）</label>
       <input type="number" id="pMax" value="${p.maxTokens||""}" placeholder="空欄＝共通設定（${S.maxTokens}）" min="128" max="16384" step="64">
       <div class="hint">目安：おしゃべり＝500〜1,000、執筆＝4,000〜8,000。1トークン≒日本語1〜1.5文字くらい。</div></div>
+    <div class="field"><label>声（ElevenLabs Voice ID）</label>
+      <input type="text" id="pVoice" value="${escAttr(p.voiceId||"")}" placeholder="空なら読み上げなし">
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <select id="pVModel" style="flex:1.6">
+          <option value="eleven_v3" ${(p.voiceModel||"eleven_v3")==="eleven_v3"?"selected":""}>v3（表現力）</option>
+          <option value="eleven_multilingual_v2" ${p.voiceModel==="eleven_multilingual_v2"?"selected":""}>v2（安定）</option>
+          <option value="eleven_turbo_v2_5" ${p.voiceModel==="eleven_turbo_v2_5"?"selected":""}>Turbo（速い）</option>
+        </select>
+        <input type="number" id="pVStab" value="${p.vStability!=null?p.vStability:0.4}" min="0" max="1" step="0.05" style="flex:1">
+        <input type="number" id="pVStyle" value="${p.vStyle!=null?p.vStyle:0.4}" min="0" max="1" step="0.05" style="flex:1">
+        <input type="number" id="pVSpeed" value="${p.vSpeed!=null?p.vSpeed:1.0}" min="0.7" max="1.2" step="0.05" style="flex:1">
+      </div>
+      <div class="hint">左から：音声モデル／Stability（低=感情）／Style（表現）／速さ。Makemarryと同じVoice IDが使える。</div>
+      <textarea id="pVAct" style="min-height:60px;margin-top:8px" placeholder="演技メモ（例：低温で静か、囁き多め、笑いは短く）">${esc(p.actNote||"")}</textarea></div>
     <div class="field"><label>専用システムプロンプト</label>
       <textarea id="pSys" style="min-height:240px" placeholder="このモードの人格・ルール・鉄則をここに詳しく…">${esc(p.systemPrompt)}</textarea>
       <div class="hint"><span id="pCount">${(p.systemPrompt||"").length.toLocaleString()}</span> 文字。ここは毎ターン必ず最初に読まれる。</div></div>
@@ -1523,6 +1709,7 @@ function editPreset(id){
     $("#rowModelA").style.display=(v==="anthropic")?"":"none";
     $("#rowModelO").style.display=(v==="openai")?"":"none";
     $("#rowModelG").style.display=(v==="gemini")?"":"none";
+    $("#rowModelX").style.display=(v==="grok")?"":"none";
   };
   sheetEl.querySelectorAll("[data-fill]").forEach(b=>{
     b.onclick=()=>{ const t=$("#"+b.dataset.fill); if(t) t.value=b.dataset.v; };
@@ -1541,9 +1728,16 @@ function editPreset(id){
     p.provider=$("#pProv").value;
     if(p.provider==="openai") p.model=$("#pModelO").value.trim()||"gpt-5.6";
     else if(p.provider==="gemini") p.model=$("#pModelG").value.trim()||"gemini-2.5-flash";
+    else if(p.provider==="grok") p.model=$("#pModelX").value.trim()||"grok-4-1-fast-non-reasoning";
     else if(p.provider==="anthropic") p.model=$("#pModel").value;
     else p.model="";
     p.reasoning=$("#pReason")?$("#pReason").value:"";
+    p.voiceId=$("#pVoice").value.trim();
+    p.voiceModel=$("#pVModel").value;
+    p.vStability=parseFloat($("#pVStab").value);
+    p.vStyle=parseFloat($("#pVStyle").value);
+    p.vSpeed=parseFloat($("#pVSpeed").value)||1.0;
+    p.actNote=$("#pVAct").value.trim();
     p.maxTokens=Number($("#pMax").value)||"";
     p.systemPrompt=$("#pSys").value;
     p.knowledgeIds=ids.slice();
@@ -2576,6 +2770,9 @@ if(!S.apiKey){ setTimeout(openSettings, 400); }
 else{ setTimeout(checkMorning, 400); }
 setTimeout(checkSchedules, 1500);
 setInterval(checkSchedules, 30000);
+
+/* Makemarry共有記憶の自動取得（起動時） */
+try{ if(S.mmOn && S.mmUrl && S.mmToken) fetchMMShared(false); }catch(e){}
 </script>
 </body>
 </html>
