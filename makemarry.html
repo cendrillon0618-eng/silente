@@ -255,6 +255,7 @@ img{display:block}
         </select>
       </div>
       <div class="checkrow"><input type="checkbox" id="setShortStyle" checked><label for="setShortStyle" style="font-size:14px">チャットらしい短文口調をキャラに指示する</label></div>
+      <div class="checkrow"><input type="checkbox" id="setAutoCompact" checked><label for="setAutoCompact" style="font-size:14px">長い会話の自動圧縮（80通超で本人が記憶にまとめて履歴を軽くする）</label></div>
       <div class="field"><label>最大応答トークン</label><input type="number" id="setMaxTokens" value="1024"></div>
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
     </div>
@@ -272,7 +273,7 @@ img{display:block}
       <div class="sheetitem" onclick="syncConfig()"><span class="si">🔄</span>キャラ設定をサーバーに同期</div>
       <div class="sheetitem" onclick="serverTestPush()"><span class="si">📮</span>サーバー経由のテスト通知</div>
       <div class="sheetitem" onclick="forceRun()"><span class="si">💬</span>いますぐ誰かに喋らせる（テスト）</div>
-      <div class="note">同期すると「自発トークON」のキャラが、設定した時間帯に自分からメッセージを送ってくるようになります。</div>
+      <div class="note">同期すると「自発トークON」のキャラが、設定した時間帯に自分からメッセージを送ってくるようになります。記憶・思い出・予定を変えたのに未同期だと、タブに🔴が出ます。</div>
     </div>
     <div class="settsec">
       <div class="sechead">通知（Phase 2）</div>
@@ -283,7 +284,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v4.3.1</div>
+      <div class="note">Makemarry v4.4</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -308,7 +309,7 @@ img{display:block}
   <button class="tab" data-scr="chars" onclick="switchTab('chars')"><span class="ti">👥</span>キャラ</button>
   <button class="tab" data-scr="album" onclick="switchTab('album')"><span class="ti">📖</span>思い出</button>
   <button class="tab" data-scr="schedule" onclick="switchTab('schedule')"><span class="ti">📅</span>予定</button>
-  <button class="tab" data-scr="settings" onclick="switchTab('settings')"><span class="ti">⚙️</span>設定</button>
+  <button class="tab" data-scr="settings" onclick="switchTab('settings')"><span class="ti">⚙️<span id="syncDot" style="display:none;position:absolute;margin-left:-4px;font-size:10px">🔴</span></span>設定</button>
 </div>
 
 <!-- ========== チャット画面 ========== -->
@@ -388,13 +389,22 @@ function dayCost(day){
   Object.entries(rec).forEach(([k,v])=>{const c=costJpy(k,v);if(c!=null)t+=c});
   return t;
 }
-const saveAlbum=()=>LS.set('mm_album',album);
+const saveAlbum=()=>{LS.set('mm_album',album);markSyncDirty()};
 let settings = LS.get('mm_settings',{anthropicKey:'',openaiKey:'',geminiKey:'',userName:'',shortStyle:true,maxTokens:1024,histLimit:40});
 const saveChars=()=>LS.set('mm_chars',chars);
 const saveTalks=()=>LS.set('mm_talks',talks);
 const getMsgs=id=>LS.get('mm_msgs_'+id,[]);
 const saveMsgs=(id,m)=>LS.set('mm_msgs_'+id,m);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function markSyncDirty(){
+  if(!serverReadySafe())return;
+  settings.syncDirty=true;LS.set('mm_settings',settings);updateSyncDot();
+}
+function serverReadySafe(){try{return settings.serverUrl&&settings.serverToken}catch(e){return false}}
+function updateSyncDot(){
+  const d=document.getElementById('syncDot');
+  if(d)d.style.display=settings.syncDirty?'inline':'none';
+}
 const userName=()=>settings.userName||'わたし';
 
 /* ================= 壁紙プリセット ================= */
@@ -1034,7 +1044,7 @@ function openMemorySheet(){
 }
 function saveMemory(){
   curTalk.memory=document.getElementById('memText').value;
-  saveTalks();closeSheet();toast('記憶を保存しました');
+  saveTalks();markSyncDirty();closeSheet();toast('記憶を保存しました');
 }
 function summarizeMemory(trim){
   curTalk.memory=document.getElementById('memText').value;saveTalks();
@@ -1183,10 +1193,43 @@ async function generateFor(c){
     hideTyping();
     const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
     pushMsg(m);appendMsgEl(m);
+    maybeAutoCompact();
   }catch(e){
     hideTyping();showError(e);
   }
   setGenerating(false);
+}
+
+/* ---------- 自動圧縮 ---------- */
+let compacting=false;
+async function maybeAutoCompact(){
+  if(settings.autoCompact===false||compacting||!curTalk)return;
+  const talk=curTalk;
+  const msgs=getMsgs(talk.id);
+  if(msgs.length<80)return;
+  let c=null;
+  if(talk.type==='dm')c=chars.find(x=>x.id===talk.charIds[0]);
+  if(!c){ // グルチャや不明時はHaikuで事実ベースの要約
+    if(!settings.anthropicKey)return;
+    c={name:'記録係',provider:'anthropic',model:'claude-haiku-4-5-20251001',os:''};
+  }
+  compacting=true;
+  try{
+    const old=msgs.slice(0,msgs.length-30);
+    const transcript=old.map(m=>{
+      const nm=m.role==='user'?userName():(chars.find(x=>x.id===m.charId)||{name:'？'}).name;
+      return nm+': '+(m.text||'（画像）');
+    }).join('\n');
+    const prompt=`これはあなた（${c.name}）と${userName()}のチャット記録の古い部分です。\n\n${transcript}\n\n---\nこの部分を、あなた自身の記憶として残しておきたい形で簡潔にまとめてください。呼び方の変化、約束、関係の変化、大事な出来事や気持ちを優先。一人称・箇条書きで10行以内。前置き不要、記憶の内容だけを出力。`;
+    const sum=await callProvider(c.provider,c.model,c.os||'',[{role:'user',content:prompt}],800);
+    const stamp=new Date().toLocaleDateString('ja-JP');
+    talk.memory=(talk.memory?talk.memory+'\n\n':'')+`【${stamp}・自動圧縮】\n`+sum;
+    saveMsgs(talk.id,msgs.slice(-30));
+    saveTalks();markSyncDirty();
+    if(curTalk&&curTalk.id===talk.id)renderMsgs(true);
+    toast('🧹 古い履歴を記憶にまとめました');
+  }catch(e){/* 失敗しても次の機会に */}
+  compacting=false;
 }
 
 /* ---------- グルチャのターン制御 ---------- */
@@ -1455,6 +1498,7 @@ function renderSettings(){
   document.getElementById('setServerToken').value=settings.serverToken||'';
   document.getElementById('setFont').value=settings.font||'gothic';
   document.getElementById('setShortStyle').checked=settings.shortStyle!==false;
+  document.getElementById('setAutoCompact').checked=settings.autoCompact!==false;
   document.getElementById('setMaxTokens').value=settings.maxTokens||1024;
   document.getElementById('setHistLimit').value=settings.histLimit||40;
   try{
@@ -1550,6 +1594,7 @@ function saveSettings(){
     serverToken:document.getElementById('setServerToken').value.trim(),
     font:document.getElementById('setFont').value,
     shortStyle:document.getElementById('setShortStyle').checked,
+    autoCompact:document.getElementById('setAutoCompact').checked,
     maxTokens:parseInt(document.getElementById('setMaxTokens').value)||1024,
     histLimit:parseInt(document.getElementById('setHistLimit').value)||40
   };
@@ -1599,7 +1644,7 @@ events.forEach(e=>{
   if(e.comment&&!e.comments){e.comments=[{by:e.commentBy||'',text:e.comment}];delete e.comment;delete e.commentBy}
   if(!e.comments)e.comments=[];
 });
-const saveEvents=()=>LS.set('mm_events',events);
+const saveEvents=()=>{LS.set('mm_events',events);markSyncDirty()};
 function dayStart(){const d=new Date();d.setHours(0,0,0,0);return d.getTime()}
 function upcomingEvents(days){
   const t0=dayStart(),limit=t0+(days||30)*86400000;
@@ -1998,6 +2043,7 @@ async function syncConfig(){
       })
     };
     const r=await serverFetch('/config',{method:'POST',body:JSON.stringify(cfg)});
+    settings.syncDirty=false;LS.set('mm_settings',settings);updateSyncDot();
     toast('同期しました（'+r.chars+'キャラ・共有データ込み）');
   }catch(e){showError(e)}
 }
@@ -2052,6 +2098,7 @@ setInterval(checkInbox,90000);
 
 /* ================= 初期化 ================= */
 applyFont();
+updateSyncDot();
 renderTalks();
 renderSettings();
 updatePwaStatus();

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="sil-manifest.json">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0A0D15">
 <link rel="apple-touch-icon" sizes="180x180" href="icon.png">
@@ -105,6 +106,12 @@ textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
 #drawerFoot button{
   padding:12px;border:1px solid var(--line);border-radius:14px;text-align:left;padding-left:16px;color:var(--sub)}
 #drawerFoot button:active{color:var(--accent)}
+.convoGroup{display:flex;justify-content:space-between;align-items:center;padding:14px 20px 6px;
+  font-size:12px;letter-spacing:.06em;color:var(--accent);cursor:pointer;user-select:none;-webkit-user-select:none}
+.convoGroup .gArrow{opacity:.6;font-size:10px;margin-right:6px}
+.convoGroup .gCount{opacity:.55;font-size:11px}
+.convoGroup.closed{opacity:.5}
+.cMeta{font-size:10.5px;color:var(--text);opacity:.5;margin-top:3px}
 
 /* ===== sheet(modal) ===== */
 #sheetWrap{position:fixed;inset:0;z-index:20;display:none}
@@ -449,13 +456,43 @@ function renderPresets(){
     row.append(b);
   });
 }
+function fmtConvoDate(ts){
+  if(!ts) return "";
+  const d=new Date(ts), now=new Date();
+  if(d.toDateString()===now.toDateString()) return "今日";
+  const y=new Date(Date.now()-86400000);
+  if(d.toDateString()===y.toDateString()) return "昨日";
+  return (d.getMonth()+1)+"/"+d.getDate();
+}
+function convoItemEl(c, roomLabel, snippet){
+  const div=document.createElement("div");
+  div.className="convoItem"+(c.id===S.currentId?" cur":"");
+  const name=document.createElement("div");
+  name.className="name";
+  const t=document.createElement("div"); t.textContent=(c.pinned?"📌 ":"")+c.title;
+  name.append(t);
+  if(snippet){ const sp=document.createElement("div"); sp.className="snip"; sp.textContent=snippet; name.append(sp); }
+  const meta=document.createElement("div");
+  meta.className="cMeta";
+  meta.textContent=[fmtConvoDate(c.updated), c.messages.length+"通", roomLabel].filter(Boolean).join(" ・ ");
+  name.append(meta);
+  name.onclick=()=>switchConvo(c.id);
+  const del=document.createElement("button");
+  del.className="del"; del.textContent="✕";
+  del.onclick=e=>{ e.stopPropagation(); deleteConvo(c.id); };
+  div.append(name,del);
+  return div;
+}
 function renderDrawer(){
   const list=$("#convoList"); list.innerHTML="";
   const q=convoQuery.trim().toLowerCase();
-  const sorted=S.convos.slice().sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
-  sorted.forEach(c=>{
-    let snippet="";
-    if(q){
+  if(!S.drawerClosed) S.drawerClosed={};
+  const roomName=(pid)=>{ const p=S.presets.find(x=>x.id===pid); return p?p.name:"🗂 その他"; };
+
+  if(q){
+    // 検索中：全部屋を横断してフラット表示（部屋名をメタに出す）
+    S.convos.slice().sort((a,b)=>(b.updated||0)-(a.updated||0)).forEach(c=>{
+      let snippet="";
       const inTitle=c.title.toLowerCase().includes(q);
       const hit=c.messages.find(m=>(m.content||"").toLowerCase().includes(q));
       if(!inTitle && !hit) return;
@@ -463,19 +500,28 @@ function renderDrawer(){
         const i=hit.content.toLowerCase().indexOf(q);
         snippet="…"+hit.content.slice(Math.max(0,i-10), i+30)+"…";
       }
-    }
-    const div=document.createElement("div");
-    div.className="convoItem"+(c.id===S.currentId?" cur":"");
-    const name=document.createElement("div");
-    name.className="name";
-    const t=document.createElement("div"); t.textContent=(c.pinned?"📌 ":"")+c.title;
-    name.append(t);
-    if(snippet){ const sp=document.createElement("div"); sp.className="snip"; sp.textContent=snippet; name.append(sp); }
-    name.onclick=()=>switchConvo(c.id);
-    const del=document.createElement("button");
-    del.className="del"; del.textContent="✕";
-    del.onclick=e=>{ e.stopPropagation(); deleteConvo(c.id); };
-    div.append(name,del); list.append(div);
+      list.append(convoItemEl(c, roomName(c.presetId), snippet));
+    });
+    return;
+  }
+
+  // 通常：部屋ごとにグループ化（タップで折りたたみ）
+  const groups=S.presets.map(p=>({id:p.id,name:p.name,items:[]}));
+  groups.push({id:"__other",name:"🗂 その他",items:[]});
+  S.convos.forEach(c=>{
+    const g=groups.find(x=>x.id===c.presetId)||groups[groups.length-1];
+    g.items.push(c);
+  });
+  groups.forEach(g=>{
+    if(!g.items.length) return;
+    g.items.sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.updated||0)-(a.updated||0)));
+    const closed=!!S.drawerClosed[g.id];
+    const h=document.createElement("div");
+    h.className="convoGroup"+(closed?" closed":"");
+    h.innerHTML=`<span><span class="gArrow">${closed?"▶":"▼"}</span>${esc(g.name)}</span><span class="gCount">${g.items.length}件</span>`;
+    h.onclick=()=>{ S.drawerClosed[g.id]=!S.drawerClosed[g.id]; save(); renderDrawer(); };
+    list.append(h);
+    if(!closed) g.items.forEach(c=>list.append(convoItemEl(c,"",""))); 
   });
 }
 function renderChat(){
@@ -1066,6 +1112,47 @@ function setStreamUI(on){
 function openDrawer(){ drawerEl.classList.add("on"); overlayEl.classList.add("on"); }
 function closeDrawer(){ drawerEl.classList.remove("on"); overlayEl.classList.remove("on"); }
 
+/* ============ 通知（Service Worker / Push） ============ */
+let silSW=null;
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("mm-sw.js").then(r=>{silSW=r}).catch(()=>{});
+}
+function silStandalone(){ return window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true; }
+function b64uToU8_(x){ x=x.replace(/-/g,"+").replace(/_/g,"/"); while(x.length%4)x+="="; const b=atob(x),u=new Uint8Array(b.length); for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i); return u; }
+async function silSubscribePush(){
+  if(!S.mmUrl||!S.mmToken){ alert("先にMakemarry連携のURLと合言葉を入れて保存してね"); return; }
+  if(!silStandalone()){ alert("ホーム画面に追加したSilenteから実行してね（Safari直開きでは通知が使えないよ）"); return; }
+  if(!("Notification" in window)){ alert("この環境では通知が使えないみたい"); return; }
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted"){ alert("通知が許可されなかったよ"); return; }
+  if(!silSW){ alert("準備中。数秒待ってもう一度押してね"); return; }
+  try{
+    const pk=await fetch(S.mmUrl+"/public-key").then(r=>r.json());
+    const sub=await silSW.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uToU8_(pk.key)});
+    const res=await fetch(S.mmUrl+"/subscribe",{method:"POST",headers:{"content-type":"application/json","x-mm-token":S.mmToken},body:JSON.stringify({app:"silente",subscription:sub.toJSON()})});
+    const j=await res.json();
+    if(!res.ok) throw new Error(j.error||res.status);
+    await syncSilSched();
+    alert("通知の購読を登録したよ🤝 ⏰予定メッセージの時間になると通知が来る。");
+  }catch(e){ alert("購読エラー: "+e.message); }
+}
+async function syncSilSched(){
+  if(!S.mmUrl||!S.mmToken) return;
+  try{
+    const items=(S.schedules||[]).filter(x=>!x.done).map(x=>({id:x.id,at:x.at,note:x.note}));
+    await fetch(S.mmUrl+"/silente-sched",{method:"POST",headers:{"content-type":"application/json","x-mm-token":S.mmToken},body:JSON.stringify({items})});
+  }catch(e){}
+}
+async function silTestPush(){
+  if(!S.mmUrl||!S.mmToken){ alert("Makemarry連携のURLと合言葉が必要だよ"); return; }
+  try{
+    const res=await fetch(S.mmUrl+"/test-push?app=silente",{headers:{"x-mm-token":S.mmToken}});
+    const j=await res.json();
+    if(j.error) alert(j.error);
+    else alert(j.pushed===201?"送ったよ。ホームに戻ると通知が見える":"結果: "+JSON.stringify(j));
+  }catch(e){ alert("エラー: "+e.message); }
+}
+
 /* ============ Makemarry連携 ============ */
 async function fetchMMShared(show){
   try{
@@ -1234,7 +1321,10 @@ function openSettings(){
       <div class="optRow"><span>共有記憶を読み込む</span><div class="toggle ${S.mmOn?"on":""}" id="fMMOn"></div></div>
       <input type="text" id="fMMUrl" value="${escAttr(S.mmUrl||"")}" placeholder="https://xxx.workers.dev" style="margin-top:8px">
       <input type="password" id="fMMToken" value="${escAttr(S.mmToken||"")}" placeholder="合言葉（MM_TOKEN）" style="margin-top:8px">
-      <div class="hint">部屋の名前にキャラ名（葵・灯など）が含まれる部屋にだけ、Makemarryでの記憶・思い出・予定が注入される。執筆の部屋には入らないよ。保存すると同期を試すね。</div></div>
+      <div class="hint">部屋の名前にキャラ名（葵・灯など）が含まれる部屋にだけ、Makemarryでの記憶・思い出・予定が注入される。執筆の部屋には入らないよ。保存すると同期を試すね。</div>
+      <div class="rowBtns" style="margin-top:10px"><button id="fSilPush">🔔 予定メッセージの通知を購読</button></div>
+      <div class="rowBtns" style="margin-top:8px"><button id="fSilTest">📨 通知テスト</button></div>
+      <div class="hint">⏰予定メッセージの時間になると、アプリを閉じていても通知が来るようになる（サーバー側の設営済みが前提。同じURL・合言葉を使うよ）。</div></div>
     <div class="field"><label>システムプロンプト</label>
       <div class="hint" style="margin-top:0">プリセットごとに設定するようになったよ。メニュー☰ → 🍰 プリセット編集 からどうぞ。</div></div>
     <div class="field"><label>機能</label>
@@ -1271,6 +1361,8 @@ function openSettings(){
   $("#fMorn").onclick=()=>$("#fMorn").classList.toggle("on");
   $("#fThink").onclick=()=>$("#fThink").classList.toggle("on");
   $("#fMMOn").onclick=()=>$("#fMMOn").classList.toggle("on");
+  $("#fSilPush").onclick=silSubscribePush;
+  $("#fSilTest").onclick=silTestPush;
   $("#fSave").onclick=()=>{
     S.apiKey=$("#fKey").value.trim();
     const dm=$("#fModel").value.split("|");
@@ -1526,7 +1618,7 @@ function openPresets(){
     <div class="kItem" data-id="${p.id}">
       <div class="kName" data-act="edit">
         <div class="t">${esc(p.name)}</div>
-        <div class="c">${(p.systemPrompt||"").length.toLocaleString()} 文字のシスプロ ・ ナレッジ${(p.knowledgeIds||[]).length}件 ・ ${p.provider==="openai"?"GPT":(p.provider==="gemini"?"Gemini":(p.provider==="anthropic"?"Claude":"共通"))} ・ ${p.model?esc(p.model):"共通モデル"}</div>
+        <div class="c">${(p.systemPrompt||"").length.toLocaleString()} 文字のシスプロ ・ ナレッジ${(p.knowledgeIds||[]).length}件 ・ ${p.provider==="openai"?"GPT":(p.provider==="gemini"?"Gemini":(p.provider==="grok"?"Grok":(p.provider==="anthropic"?"Claude":"共通")))} ・ ${p.model?esc(p.model):"共通モデル"}</div>
       </div>
       <button class="edit" data-act="edit">✏️</button>
     </div>`).join("");
@@ -2459,7 +2551,7 @@ function openQuick(){
   if(!c.ovr) c.ovr={};
   const o=c.ovr;
   const p=presetOf(c);
-  const provLabel = p.provider==="openai"?"GPT":(p.provider==="gemini"?"Gemini":(p.provider==="anthropic"?"Claude":"共通設定"));
+  const provLabel = p.provider==="openai"?"GPT":(p.provider==="gemini"?"Gemini":(p.provider==="grok"?"Grok":(p.provider==="anthropic"?"Claude":"共通設定")));
   const aOpts=['<option value="">部屋の設定と同じ</option>']
     .concat(MODELS.map(([v,l])=>`<option value="${v}" ${o.model===v?"selected":""}>${l}</option>`)).join("");
   openSheet(`
@@ -2471,6 +2563,7 @@ function openQuick(){
         <option value="anthropic" ${o.provider==="anthropic"?"selected":""}>Claude</option>
         <option value="openai" ${o.provider==="openai"?"selected":""}>GPT</option>
         <option value="gemini" ${o.provider==="gemini"?"selected":""}>Gemini</option>
+        <option value="grok" ${o.provider==="grok"?"selected":""}>Grok</option>
       </select></div>
     <div class="field" id="qRowA" style="${o.provider==="anthropic"?"":"display:none"}"><label>モデル（Claude）</label><select id="qModelA">${aOpts}</select></div>
     <div class="field" id="qRowO" style="${o.provider==="openai"?"":"display:none"}"><label>モデル（GPT）</label>
@@ -2487,6 +2580,14 @@ function openQuick(){
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="pChip" data-fill="qModelG" data-v="gemini-2.5-pro" style="flex:none;padding:7px 12px;font-size:12px">2.5-pro</button>
         <button class="pChip" data-fill="qModelG" data-v="gemini-2.5-flash" style="flex:none;padding:7px 12px;font-size:12px">2.5-flash</button>
+        <button class="pChip" data-fill="qModelG" data-v="gemini-3.5-flash" style="flex:none;padding:7px 12px;font-size:12px">3.5-flash</button>
+      </div></div>
+    <div class="field" id="qRowX" style="${o.provider==="grok"?"":"display:none"}"><label>モデル（Grok）</label>
+      <input type="text" id="qModelX" value="${escAttr(o.provider==="grok"?(o.model||"grok-4-1-fast-non-reasoning"):"grok-4-1-fast-non-reasoning")}">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="pChip" data-fill="qModelX" data-v="grok-4-1-fast-non-reasoning" style="flex:none;padding:7px 12px;font-size:12px">4.1-fast</button>
+        <button class="pChip" data-fill="qModelX" data-v="grok-4.3" style="flex:none;padding:7px 12px;font-size:12px">grok-4.3</button>
+        <button class="pChip" data-fill="qModelX" data-v="grok-4.5" style="flex:none;padding:7px 12px;font-size:12px">grok-4.5</button>
       </div></div>
     <div class="field"><label>最大出力の長さ（トークン）</label>
       <input type="number" id="qMax" value="${o.maxTokens||""}" placeholder="空欄＝部屋の設定" min="128" max="16384" step="64"></div>
@@ -2512,6 +2613,7 @@ function openQuick(){
     $("#qRowA").style.display=(v==="anthropic")?"":"none";
     $("#qRowO").style.display=(v==="openai")?"":"none";
     $("#qRowG").style.display=(v==="gemini")?"":"none";
+    $("#qRowX").style.display=(v==="grok")?"":"none";
   };
   sheetEl.querySelectorAll("[data-fill]").forEach(b=>{
     b.onclick=()=>{ const t=$("#"+b.dataset.fill); if(t) t.value=b.dataset.v; };
@@ -2522,6 +2624,7 @@ function openQuick(){
     o.provider=$("#qProv").value;
     if(o.provider==="openai") o.model=$("#qModelO").value.trim()||"gpt-5.6";
     else if(o.provider==="gemini") o.model=$("#qModelG").value.trim()||"gemini-2.5-flash";
+    else if(o.provider==="grok") o.model=$("#qModelX").value.trim()||"grok-4-1-fast-non-reasoning";
     else if(o.provider==="anthropic") o.model=$("#qModelA").value;
     else o.model="";
     o.maxTokens=Number($("#qMax").value)||"";
@@ -2619,7 +2722,7 @@ function openSchedules(){
     const act=e.target.closest("[data-act]"); if(!act) return;
     if(act.dataset.act==="del"){
       if(confirm(`「${s.note}」を削除する？`)){
-        S.schedules=S.schedules.filter(x=>x.id!==s.id); save(); openSchedules();
+        S.schedules=S.schedules.filter(x=>x.id!==s.id); save(); syncSilSched(); openSchedules();
       }
     }else{ editSchedule(s); }
   };
@@ -2645,6 +2748,7 @@ function editSchedule(s){
       s.at=at; s.note=note; s.presetId=$("#scP").value; s.done=false; s.snooze=0;
     }else{
       S.schedules.push({id:uid(),at:at,note:note,presetId:$("#scP").value,convoId:s.convoId||"",done:false,snooze:0});
+      syncSilSched();
     }
     save(); closeSheet();
     alert("⏰ 予定を保存したよ。時間になったら（閉じてた時は次に開いた時に）声をかけるね。");
@@ -2691,7 +2795,7 @@ async function scheduleFromChat(req){
   }
 }
 function deliverSchedule(s){
-  s.done=true; save();
+  s.done=true; save(); syncSilSched();
   let c = s.convoId ? S.convos.find(x=>x.id===s.convoId) : null;
   if(!c){
     c={id:uid(),title:"⏰ "+s.note.slice(0,14),messages:[],updated:Date.now(),presetId:s.presetId||S.currentPreset};
