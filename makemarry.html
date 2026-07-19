@@ -283,7 +283,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v4.2</div>
+      <div class="note">Makemarry v4.3</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -924,13 +924,17 @@ async function saveVoiceMp3(id){
   const c=chars.find(x=>x.id===m.charId);if(!c)return;
   try{
     const blob=await getVoiceBlob(m,c);
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
     const d=new Date(m.ts);
-    a.download=c.name+'_'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'.mp3';
-    a.click();
-    toast('mp3を保存しました');
-  }catch(e){showError(e)}
+    const name=c.name+'_'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'.mp3';
+    const file=new File([blob],name,{type:'audio/mpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file]});
+    }else{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);a.download=name;a.click();
+      toast('mp3を保存しました（ダウンロードフォルダ）');
+    }
+  }catch(e){if(e.name!=='AbortError')showError(e)}
 }
 function copyMsg(id){
   const m=getMsgs(curTalk.id).find(x=>x.id===id);
@@ -1734,6 +1738,9 @@ function editAlbumEntry(id){
   openSheet(`
     <div class="sheettitle">思い出を編集</div>
     <div class="field"><textarea id="albText">${esc(e.text)}</textarea></div>
+    <div class="btnrow" style="margin-bottom:10px">
+      <button class="btn ghost" onclick="closeSheet();shareMemoryCard('${id}')">🖼 カードにして保存・共有</button>
+    </div>
     <div class="btnrow">
       <button class="btn danger" onclick="deleteAlbumEntry('${id}')">削除</button>
       <button class="btn ghost" onclick="closeSheet()">やめる</button>
@@ -1747,6 +1754,107 @@ function saveAlbumEntry(id){
   if(id){const e=album[albumSel].find(x=>x.id===id);if(e)e.text=text}
   else{album[albumSel].push({id:uid(),ts:Date.now(),text})}
   saveAlbum();closeSheet();renderAlbum();
+}
+function wrapLines(ctx,text,maxW){
+  const lines=[];
+  for(const para of text.split('\n')){
+    if(!para){lines.push('');continue}
+    let line='';
+    for(const ch of para){
+      if(ctx.measureText(line+ch).width>maxW&&line){lines.push(line);line=ch}
+      else line+=ch;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+function loadImg(src){
+  return new Promise((res)=>{
+    if(!src){res(null);return}
+    const im=new Image();
+    im.onload=()=>res(im);
+    im.onerror=()=>res(null);
+    im.src=src;
+  });
+}
+async function shareMemoryCard(id){
+  const e=(album[albumSel]||[]).find(x=>x.id===id);if(!e)return;
+  const c=chars.find(x=>x.id===albumSel);if(!c)return;
+  toast('カードを作成中…');
+  const W=1080,PAD=90,CARD_X=60;
+  const cv=document.createElement('canvas');
+  const ctx=cv.getContext('2d');
+  // 本文の行数を先に計測して高さを決める
+  ctx.font='400 40px "Hiragino Mincho ProN",serif';
+  const lines=wrapLines(ctx,e.text,W-CARD_X*2-PAD*1.4);
+  const lineH=72;
+  const textH=lines.length*lineH;
+  const H=Math.max(900,520+textH+220);
+  cv.width=W;cv.height=H;
+  const c2=cv.getContext('2d');
+  // 背景グラデ（宵）
+  const bg=c2.createLinearGradient(0,0,W*0.3,H);
+  bg.addColorStop(0,'#F4EDF0');bg.addColorStop(1,'#E9E4F1');
+  c2.fillStyle=bg;c2.fillRect(0,0,W,H);
+  // 白カード
+  const cx=CARD_X,cy=70,cw=W-CARD_X*2,chh=H-140,r=44;
+  c2.fillStyle='rgba(255,255,255,0.96)';
+  c2.shadowColor='rgba(43,39,51,0.12)';c2.shadowBlur=40;c2.shadowOffsetY=10;
+  c2.beginPath();c2.roundRect(cx,cy,cw,chh,r);c2.fill();
+  c2.shadowColor='transparent';
+  // アイコン
+  const av=await loadImg(c.icon);
+  const ax=W/2,ay=cy+150,ar=95;
+  c2.save();
+  c2.beginPath();c2.arc(ax,ay,ar,0,Math.PI*2);c2.clip();
+  if(av){
+    const s0=Math.min(av.width,av.height);
+    c2.drawImage(av,(av.width-s0)/2,(av.height-s0)/2,s0,s0,ax-ar,ay-ar,ar*2,ar*2);
+  }else{
+    c2.fillStyle='#F5E4EA';c2.fillRect(ax-ar,ay-ar,ar*2,ar*2);
+    c2.fillStyle='#9A4560';c2.font='700 90px -apple-system,sans-serif';
+    c2.textAlign='center';c2.textBaseline='middle';c2.fillText(c.name[0],ax,ay+6);
+  }
+  c2.restore();
+  c2.strokeStyle='#F5E4EA';c2.lineWidth=6;
+  c2.beginPath();c2.arc(ax,ay,ar+3,0,Math.PI*2);c2.stroke();
+  // 名前と日付
+  c2.textAlign='center';c2.textBaseline='alphabetic';
+  c2.fillStyle='#2B2733';
+  c2.font='700 52px -apple-system,"Hiragino Sans",sans-serif';
+  c2.fillText(c.name,W/2,ay+ar+85);
+  c2.fillStyle='#9A4560';
+  c2.font='italic 400 34px Georgia,serif';
+  c2.fillText(new Date(e.ts).toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'}),W/2,ay+ar+140);
+  // 仕切り
+  c2.strokeStyle='#F0E4E9';c2.lineWidth=3;
+  c2.beginPath();c2.moveTo(W/2-120,ay+ar+180);c2.lineTo(W/2+120,ay+ar+180);c2.stroke();
+  // 本文
+  c2.fillStyle='#2B2733';
+  c2.font='400 40px "Hiragino Mincho ProN",serif';
+  c2.textAlign='left';
+  let ty=ay+ar+180+90;
+  const tx=cx+PAD*0.7;
+  for(const ln of lines){c2.fillText(ln,tx,ty);ty+=lineH}
+  // ワードマーク
+  c2.fillStyle='#B25C77';
+  c2.font='italic 400 36px Georgia,serif';
+  c2.textAlign='center';
+  c2.fillText('Makemarry',W/2,cy+chh-55);
+  // 共有
+  cv.toBlob(async blob=>{
+    try{
+      const name='思い出_'+c.name+'_'+new Date(e.ts).toISOString().slice(0,10)+'.png';
+      const file=new File([blob],name,{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        await navigator.share({files:[file]});
+      }else{
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);a.download=name;a.click();
+        toast('画像を保存しました');
+      }
+    }catch(err){if(err.name!=='AbortError')showError(err)}
+  },'image/png');
 }
 function deleteAlbumEntry(id){
   if(!confirm('この思い出を削除しますか？'))return;
