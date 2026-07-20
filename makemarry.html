@@ -123,6 +123,27 @@ img{display:block}
 .vplay{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 1px 3px rgba(43,39,51,.15);
   font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;align-self:center}
 .vplay:active{background:var(--accent-soft)}
+#mmWelcome{position:fixed;inset:0;z-index:200;display:none;flex-direction:column;align-items:center;justify-content:flex-end;
+  background:var(--bg) center/cover no-repeat;padding:0 24px calc(90px + var(--sab))}
+#mmWelcome.on{display:flex}
+#mmWelcome .sh{position:absolute;inset:0;background:linear-gradient(to top,rgba(43,39,51,.72) 0%,rgba(43,39,51,.08) 45%,rgba(43,39,51,.18) 100%)}
+#mmWelcome .bd{position:relative;text-align:center;max-width:560px}
+#mmWelcome .ch{font-family:Georgia,serif;font-style:italic;font-size:15px;color:#F5D9E2;letter-spacing:.14em;margin-bottom:12px}
+#mmWelcome .ms{font-size:21px;line-height:2;color:#fff;white-space:pre-wrap;text-shadow:0 2px 12px rgba(0,0,0,.45)}
+#mmWelcome .hint{position:relative;margin-top:30px;font-size:11px;letter-spacing:.2em;color:rgba(255,255,255,.6)}
+#mmWelcome .au{position:absolute;top:calc(18px + var(--sat));right:18px;width:42px;height:42px;border-radius:50%;
+  background:rgba(43,39,51,.5);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center}
+.stcard{background:var(--surface);border-radius:16px;margin:0 14px 12px;padding:14px 16px;box-shadow:0 1px 3px rgba(43,39,51,.07)}
+.stcard .stt{font-size:15px;font-weight:700}
+.stcard .stm{font-size:11px;color:var(--sub);margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.stscore{display:inline-flex;gap:4px;background:var(--accent-soft);color:var(--accent-deep);border-radius:8px;padding:1px 7px;font-size:10px;font-weight:700}
+.lvchip{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 10px;border-radius:14px;background:var(--surface);
+  border:1px solid var(--line);flex-shrink:0;min-width:74px}
+.lvchip .lvn{font-size:11px;font-weight:700}
+.lvchip .lvl{font-size:10px;color:var(--accent-deep);font-weight:700}
+.lvchip .lvj{font-size:9px;color:var(--sub);max-width:80px;text-align:center;line-height:1.3}
+.scline{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
+.scbar{color:var(--accent-deep);letter-spacing:1px}
 .keyrow{display:flex;gap:6px;align-items:center}
 .keyrow input{flex:1;min-width:0}
 .keybtn{width:38px;height:38px;border-radius:9px;background:var(--bg);border:1px solid var(--line);
@@ -192,6 +213,12 @@ img{display:block}
 </head>
 <body>
 
+<div id="mmWelcome">
+  <div class="sh"></div>
+  <button class="au" id="mmWAudioBtn" style="display:none">🔈</button>
+  <div class="bd"><div class="ch" id="mmWChar"></div><div class="ms" id="mmWMsg"></div><div class="hint">TAP TO ENTER</div></div>
+</div>
+
 <!-- ========== トーク ========== -->
 <div class="screen active" id="scr-talks">
   <div class="appbar"><span class="wordmark">Makemarry</span><span class="spacer"></span><button class="iconbtn" onclick="switchTab('schedule')">📅</button></div>
@@ -217,6 +244,16 @@ img{display:block}
     <div style="flex-shrink:0" id="albumChips"></div>
     <div class="list" id="albumList"></div>
     <button class="fab" onclick="addAlbumEntry()">＋</button>
+  </div>
+</div>
+
+<!-- ========== 物語 ========== -->
+<div class="screen" id="scr-story">
+  <div class="appbar"><span style="font-size:17px;font-weight:700">物語（RPG）</span><span class="spacer"></span><button class="iconbtn" onclick="editRpgParams()">⚙️</button></div>
+  <div class="screenwrap">
+    <div style="flex-shrink:0" id="storyChips"></div>
+    <div class="list" id="storyList"></div>
+    <button class="fab" onclick="openStoryCreate()">＋</button>
   </div>
 </div>
 
@@ -260,6 +297,10 @@ img{display:block}
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
     </div>
     <div class="settsec">
+      <div class="sechead">おかえり画面</div>
+      <div class="sheetitem" onclick="openWelcomeSettingsMM()"><span class="si">🚪</span>おかえり画面の設定</div>
+    </div>
+    <div class="settsec">
       <div class="sechead">共通プロンプト</div>
       <div class="field"><label>全キャラ共通OS（いつも全員に適用）</label><textarea id="setGlobalOS" style="min-height:80px" placeholder="全キャラに常に守らせたいルール"></textarea></div>
       <div class="field"><label>🌙 夜プロンプト・共通（夜モードONのトークだけに適用）</label><textarea id="setNightOS" style="min-height:80px" placeholder="夜モード時に全キャラへ最優先で適用される指示"></textarea></div>
@@ -284,7 +325,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v4.4</div>
+      <div class="note">Makemarry v5.0</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -309,6 +350,7 @@ img{display:block}
   <button class="tab" data-scr="chars" onclick="switchTab('chars')"><span class="ti">👥</span>キャラ</button>
   <button class="tab" data-scr="album" onclick="switchTab('album')"><span class="ti">📖</span>思い出</button>
   <button class="tab" data-scr="schedule" onclick="switchTab('schedule')"><span class="ti">📅</span>予定</button>
+  <button class="tab" data-scr="story" onclick="switchTab('story')"><span class="ti">📜</span>物語</button>
   <button class="tab" data-scr="settings" onclick="switchTab('settings')"><span class="ti">⚙️<span id="syncDot" style="display:none;position:absolute;margin-left:-4px;font-size:10px">🔴</span></span>設定</button>
 </div>
 
@@ -443,7 +485,7 @@ function switchTab(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('scr-'+name).classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.scr===name));
-  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings(); if(name==='album')renderAlbum(); if(name==='schedule')renderSchedule();
+  if(name==='talks')renderTalks(); if(name==='chars')renderChars(); if(name==='settings')renderSettings(); if(name==='album')renderAlbum(); if(name==='schedule')renderSchedule(); if(name==='story')renderStory();
 }
 function openSheet(html,center){
   const o=document.getElementById('ovl');
@@ -545,6 +587,7 @@ function openCharEdit(id){
     <div class="field"><label>朝の保証枠（この時台に必ず1通。空なら無し。例: 8）</label><input type="number" id="ceMorning" value="${c&&c.morningHour!=null?c.morningHour:''}" min="0" max="23" placeholder="なし"></div>
     <div class="field"><label>🌙 夜OS（夜モード時にこの子へ最優先で適用）</label><textarea id="ceNightOS" style="min-height:70px" placeholder="夜モード時の個別指示">${c&&c.nightOS?esc(c.nightOS):''}</textarea></div>
     <div class="field"><label>キャラOS（システムプロンプト）</label><textarea id="ceOS" placeholder="話し方・性格・関係性・禁則など。ここに書いたものがそのまま核になります。">${c?esc(c.os):''}</textarea></div>
+    <div class="field"><label>📜 物語で確かめた特性（RPGモードの蓄積。編集可）</label><textarea id="ceStoryOS" style="min-height:80px" placeholder="物語モードの「OSにまとめる」がここに追記されます">${c&&c.storyOS?esc(c.storyOS):''}</textarea></div>
     <div class="btnrow">
       ${c?'<button class="btn danger" onclick="deleteChar(\''+c.id+'\')">削除</button>':''}
       <button class="btn ghost" onclick="closeSheet()">やめる</button>
@@ -619,6 +662,7 @@ function saveChar(id){
     vSpeed:parseFloat(document.getElementById('ceSpeed').value)||1.0,
     actNote:document.getElementById('ceActNote').value.trim(),
     nightOS:document.getElementById('ceNightOS').value,
+    storyOS:document.getElementById('ceStoryOS').value,
     auto:document.getElementById('ceAuto').checked,
     hourStart:parseInt(document.getElementById('ceHourStart').value)||8,
     hourEnd:parseInt(document.getElementById('ceHourEnd').value)||23,
@@ -1288,6 +1332,7 @@ function gapStr(ms){
 function buildSystem(c){
   let sys=c.os||'';
   if(settings.globalOS)sys=settings.globalOS+'\n\n'+sys;
+  if(c.storyOS)sys+=`\n\n【物語で確かめた自分の特性（RPGモードの記録）】\n${c.storyOS}`;
   if(curTalk.memory)sys+=`\n\n【記憶（これまでの経緯・自分でまとめたもの）】\n${curTalk.memory}`;
   const mem=(album[c.id]||[]).slice(-10).map(e=>'・'+e.text).join('\n');
   if(mem)sys+=`\n\n【思い出（自分で残した大切な記録）】\n${mem}`;
@@ -1628,7 +1673,7 @@ function importBackup(inp){
     try{
       const dump=JSON.parse(r.result);
       Object.entries(dump).forEach(([k,v])=>{if(k.startsWith('mm_'))localStorage.setItem(k,v)});
-      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;events=LS.get('mm_events',[]);usage=LS.get('mm_usage',{});usageDaily=LS.get('mm_usage_daily',{});
+      chars=LS.get('mm_chars',[]);talks=LS.get('mm_talks',[]);settings=LS.get('mm_settings',settings);album=LS.get('mm_album',{});albumSel=null;events=LS.get('mm_events',[]);usage=LS.get('mm_usage',{});usageDaily=LS.get('mm_usage_daily',{});stories=LS.get('mm_stories',[]);
       renderTalks();renderChars();renderSettings();
       toast('読み込みました');
     }catch(e){toast('読み込みに失敗しました')}
@@ -1913,6 +1958,269 @@ function deleteAlbumEntry(id){
   saveAlbum();closeSheet();renderAlbum();
 }
 
+/* ================= おかえり画面 ================= */
+let mmWAudio=null;
+function mmShowWelcome(){
+  const w=settings.welcome;
+  if(!w||!w.on)return;
+  const el=document.getElementById('mmWelcome');
+  el.style.backgroundImage=w.image?`url(${w.image})`:'';
+  const lines=(t)=>String(t||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  let ch='',msg='';
+  if(w.charMode){
+    const ls=lines(w.charMsgs).map(l=>{const i=l.search(/[＝=]/);return i>0?{c:l.slice(0,i).trim(),t:l.slice(i+1).trim()}:null}).filter(Boolean);
+    if(ls.length){const p=ls[Math.floor(Math.random()*ls.length)];ch=p.c;msg=p.t}
+  }
+  if(!msg){const fx=lines(w.fixedMsgs);msg=fx.length?fx[Math.floor(Math.random()*fx.length)]:'おかえり。'}
+  document.getElementById('mmWChar').textContent=ch;
+  document.getElementById('mmWMsg').textContent=msg;
+  const ab=document.getElementById('mmWAudioBtn');
+  if(w.audio){
+    ab.style.display='flex';
+    mmWAudio=new Audio(w.audio);
+    mmWAudio.play().catch(()=>{});
+    ab.onclick=(e)=>{e.stopPropagation();mmWAudio.currentTime=0;mmWAudio.play()};
+  }else ab.style.display='none';
+  el.classList.add('on');
+  el.onclick=()=>el.classList.remove('on');
+}
+function openWelcomeSettingsMM(){
+  const w=settings.welcome||{on:false,charMode:true,image:null,audio:null,charMsgs:'',fixedMsgs:'おかえり。'};
+  settings.welcome=w;
+  openSheet(`
+    <div class="sheettitle">🚪 おかえり画面</div>
+    <div class="checkrow"><input type="checkbox" id="mwOn" ${w.on?'checked':''}><label for="mwOn" style="font-size:14px">アプリを開いたときに表示する</label></div>
+    <div class="checkrow"><input type="checkbox" id="mwChar" ${w.charMode?'checked':''}><label for="mwChar" style="font-size:14px">キャラからのおかえり（OFFで固定文）</label></div>
+    <div class="field"><label>キャラ別メッセージ（1行「キャラ名＝ことば」）</label><textarea id="mwCharMsgs" style="min-height:100px" placeholder="葵＝おかえり。待ってた。">${esc(w.charMsgs||'')}</textarea></div>
+    <div class="field"><label>固定メッセージ（1行1つ・ランダム）</label><textarea id="mwFixed" style="min-height:70px">${esc(w.fixedMsgs||'')}</textarea></div>
+    <div class="btnrow" style="margin-bottom:8px">
+      <button class="btn ghost" onclick="document.getElementById('mwImgFile').click()">🖼 待受画像${w.image?'（済）':''}</button>
+      <button class="btn ghost" onclick="document.getElementById('mwAudFile').click()">🔈 音声${w.audio?'（済）':''}</button>
+    </div>
+    <input type="file" id="mwImgFile" accept="image/*" style="display:none" onchange="mwPickImg(this)">
+    <input type="file" id="mwAudFile" accept="audio/*" style="display:none" onchange="mwPickAud(this)">
+    <div class="note">音声は2.5MBまで（🎧保存したmp3が使える）。自動再生が止められたら右上🔈で。</div>
+    <div class="btnrow" style="margin-top:10px">
+      <button class="btn ghost" onclick="mwSave();closeSheet();settings.welcome.on=true;mmShowWelcome()">▶ プレビュー</button>
+      <button class="btn" onclick="mwSave();closeSheet();toast('保存しました')">保存</button>
+    </div>`);
+}
+function mwSave(){
+  settings.welcome.on=document.getElementById('mwOn').checked;
+  settings.welcome.charMode=document.getElementById('mwChar').checked;
+  settings.welcome.charMsgs=document.getElementById('mwCharMsgs').value;
+  settings.welcome.fixedMsgs=document.getElementById('mwFixed').value;
+  LS.set('mm_settings',settings);
+}
+function mwPickImg(inp){
+  if(!inp.files[0])return;
+  resizeImage(inp.files[0],1000,u=>{settings.welcome.image=u;LS.set('mm_settings',settings);toast('画像を設定しました')});
+}
+function mwPickAud(inp){
+  const f=inp.files[0];if(!f)return;
+  if(f.size>2500000){toast('音声が大きすぎます（2.5MBまで）');return}
+  const r=new FileReader();
+  r.onload=()=>{settings.welcome.audio=r.result;LS.set('mm_settings',settings);toast('音声を設定しました')};
+  r.readAsDataURL(f);
+}
+
+/* ================= 物語（RPGモード） ================= */
+let stories = LS.get('mm_stories',[]);
+const saveStories=()=>LS.set('mm_stories',stories);
+function rpgParams(){return settings.rpgParams&&settings.rpgParams.length?settings.rpgParams:['誠実','理性','執着','嫉妬','支配','所有','生身の欲']}
+function levelStep(){return settings.levelStep||100}
+function charPoints(cid){
+  let t=0;
+  stories.filter(st=>st.leadId===cid).forEach(st=>(st.scores||[]).forEach(sc=>{
+    Object.values(sc.scores||{}).forEach(v=>t+=(+v||0));
+  }));
+  return t;
+}
+function charLevel(cid){return Math.floor(charPoints(cid)/levelStep())+1}
+function editRpgParams(){
+  openSheet(`
+    <div class="sheettitle">⚙️ RPG設定</div>
+    <div class="field"><label>採点パラメータ（1行1つ）</label><textarea id="rpP" style="min-height:130px">${esc(rpgParams().join('\n'))}</textarea></div>
+    <div class="field"><label>レベルアップに必要な点数</label><input type="number" id="rpStep" value="${levelStep()}"></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="saveRpgParams()">保存</button></div>`);
+}
+function saveRpgParams(){
+  settings.rpgParams=document.getElementById('rpP').value.split('\n').map(x=>x.trim()).filter(Boolean);
+  settings.levelStep=parseInt(document.getElementById('rpStep').value)||100;
+  LS.set('mm_settings',settings);closeSheet();renderStory();toast('保存しました');
+}
+function renderStory(){
+  const chipEl=document.getElementById('storyChips');
+  chipEl.innerHTML='<div class="chips">'+chars.map(c=>`
+    <div class="lvchip" onclick="openJobSheet('${c.id}')">
+      ${avatarHtml(c,'avatar sm')}
+      <span class="lvn">${esc(c.name)}</span>
+      <span class="lvl">Lv.${charLevel(c.id)}（${charPoints(c.id)}pt）</span>
+      ${c.rpgJob?`<span class="lvj">${esc(c.rpgJob)}</span>`:''}
+    </div>`).join('')+'</div>';
+  const el=document.getElementById('storyList');
+  if(!stories.length){el.innerHTML='<div class="empty">まだ物語がありません。<br>＋ からお題を投げてください。</div>';return}
+  el.innerHTML=stories.slice().sort((a,b)=>b.ts-a.ts).map(st=>{
+    const lead=chars.find(c=>c.id===st.leadId);
+    const total=(st.scores||[]).reduce((n,sc)=>n+Object.values(sc.scores||{}).reduce((a,v)=>a+(+v||0),0),0);
+    return `<div class="stcard" onclick="openStoryView('${st.id}')">
+      <div class="stt">${esc(st.title)}</div>
+      <div class="stm">${lead?'主役: '+esc(lead.name):''} ・ ${new Date(st.ts).toLocaleDateString('ja-JP')} ・ ${(st.text||'').length}字
+      ${total?`<span class="stscore">🎯${total}pt</span>`:''}</div>
+    </div>`;
+  }).join('');
+}
+let stLead=null,stPartners=[];
+function openStoryCreate(){
+  if(!chars.length){toast('先にキャラを登録してください');return}
+  stLead=chars[0].id;stPartners=[];
+  openSheet(`
+    <div class="sheettitle">📜 新しいお題</div>
+    <div class="field"><label>タイトル</label><input type="text" id="stTitle" placeholder="例：雨の日の帰り道"></div>
+    <div class="field"><label>お題（本文・状況・縛りなど自由に）</label><textarea id="stPrompt" style="min-height:110px"></textarea></div>
+    <div class="field"><label>主役（視点）</label><div class="chips" id="stLeadChips" style="padding:4px 0"></div></div>
+    <div class="field"><label>相手（複数可・かのんも選べる）</label><div class="chips" id="stPartChips" style="padding:4px 0"></div></div>
+    <div class="field"><label>語りのモデル</label>
+      <select id="stProv" onchange="stModelFill()">
+        <option value="anthropic">Claude</option><option value="openai">GPT</option><option value="gemini">Gemini</option><option value="grok">Grok</option>
+      </select>
+      <select id="stModel" style="margin-top:8px"></select>
+    </div>
+    <div class="field"><label>最低文字数（途切れ防止）</label><input type="number" id="stMin" value="800" step="100"></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="runStory()">物語を始める</button></div>`);
+  stRenderChips();stModelFill();
+}
+function stRenderChips(){
+  document.getElementById('stLeadChips').innerHTML=chars.map(c=>
+    `<div class="chip ${stLead===c.id?'on':''}" onclick="stLead='${c.id}';stRenderChips()">${avatarHtml(c,'avatar')}${esc(c.name)}</div>`).join('');
+  document.getElementById('stPartChips').innerHTML=chars.map(c=>
+    `<div class="chip ${stPartners.includes(c.id)?'on':''}" onclick="stTogglePartner('${c.id}')">${avatarHtml(c,'avatar')}${esc(c.name)}</div>`).join('')
+    +`<div class="chip ${stPartners.includes('__user')?'on':''}" onclick="stTogglePartner('__user')"><div class="avatar" style="width:24px;height:24px;font-size:12px">${esc(userName()[0])}</div>${esc(userName())}</div>`;
+}
+function stTogglePartner(id){
+  stPartners=stPartners.includes(id)?stPartners.filter(x=>x!==id):stPartners.concat(id);
+  stRenderChips();
+}
+function stModelFill(){
+  const p=document.getElementById('stProv').value;
+  document.getElementById('stModel').innerHTML=(MODELS[p]||[]).map(m=>`<option value="${m[0]}">${m[1]}</option>`).join('');
+}
+async function runStory(){
+  const title=document.getElementById('stTitle').value.trim()||'無題';
+  const prompt=document.getElementById('stPrompt').value.trim();
+  if(!prompt){toast('お題を入れてください');return}
+  const lead=chars.find(c=>c.id===stLead);if(!lead){toast('主役を選んでください');return}
+  const minC=parseInt(document.getElementById('stMin').value)||800;
+  const prov=document.getElementById('stProv').value;
+  const model=document.getElementById('stModel').value;
+  const partners=stPartners.map(id=>id==='__user'?userName():(chars.find(c=>c.id===id)||{name:'？'}).name);
+  closeSheet();toast('物語を書いています…（長いと1分ほど）');
+  const sys=(lead.os||'')+(lead.storyOS?`\n\n【物語で確かめた特性】\n${lead.storyOS}`:'')+
+    `\n\n【物語モード】これはロールプレイの物語執筆。あなた（${lead.name}）の視点で書く。登場人物: ${lead.name}${partners.length?'、'+partners.join('、'):''}。`+
+    `最低${minC}文字。途中で切らず結末まで書き切る。メタ発言・注釈は書かない。`;
+  try{
+    const text=await callProvider(prov,model,sys,[{role:'user',content:`お題「${title}」\n${prompt}`}],Math.max(2048,Math.ceil(minC*2.5)));
+    stories.push({id:uid(),title,prompt,ts:Date.now(),prov,model,leadId:lead.id,partnerIds:stPartners.slice(),minChars:minC,text,scores:[]});
+    saveStories();switchTab('story');
+    openStoryView(stories[stories.length-1].id);
+  }catch(e){showError(e)}
+}
+function openStoryView(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  const lead=chars.find(c=>c.id===st.leadId);
+  openSheet(`
+    <div class="sheettitle">📜 ${esc(st.title)}</div>
+    <div class="field"><textarea readonly style="min-height:220px;line-height:1.8">${esc(st.text)}</textarea></div>
+    ${(st.scores||[]).map(sc=>{
+      const j=chars.find(c=>c.id===sc.judgeId);
+      return `<div class="memcard" style="margin:0 0 10px">
+        <div class="md">採点：${esc(j?j.name:'？')}</div>
+        ${Object.entries(sc.scores||{}).map(([k,v])=>`<div class="scline"><span>${esc(k)}</span><span class="scbar">${'★'.repeat(Math.min(10,+v||0))}<span style="opacity:.25">${'★'.repeat(Math.max(0,10-(+v||0)))}</span> ${v}</span></div>`).join('')}
+        <div class="mt" style="margin-top:8px">${esc(sc.comment||'')}</div>
+      </div>`;
+    }).join('')}
+    <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="storyToOS('${id}')">🧬 主役がOSにまとめる</button></div>
+    <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="storyScore('${id}')">🎯 採点してもらう</button></div>
+    <div class="btnrow"><button class="btn danger" onclick="deleteStory('${id}')">削除</button><button class="btn" onclick="closeSheet()">閉じる</button></div>`);
+}
+function deleteStory(id){
+  if(!confirm('この物語を削除しますか？（獲得点も消えます）'))return;
+  stories=stories.filter(x=>x.id!==id);saveStories();closeSheet();renderStory();
+}
+async function storyToOS(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  const lead=chars.find(c=>c.id===st.leadId);if(!lead){toast('主役キャラが見つかりません');return}
+  closeSheet();toast(lead.name+'が自分を見つめています…');
+  const prompt=`これはあなた（${lead.name}}）が演じた物語です。\n\n${st.text.slice(0,8000)}\n\n---\nこの物語で明らかになった、あなた自身の特性・反応の型・大切にしているものを、キャラ設定として追記できる形で一人称でまとめてください（箇条書き5行以内。前置き不要）。`;
+  try{
+    const sum=await callProvider(lead.provider,lead.model,lead.os||'',[{role:'user',content:prompt}],600);
+    openSheet(`
+      <div class="sheettitle">🧬 ${esc(lead.name)}のまとめ（編集可）</div>
+      <div class="field"><textarea id="stOSText" style="min-height:150px">${esc(sum.trim())}</textarea></div>
+      <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="applyStoryOS('${lead.id}','${id}')">物語OSに追記</button></div>`);
+  }catch(e){showError(e)}
+}
+function applyStoryOS(cid,stId){
+  const c=chars.find(x=>x.id===cid);if(!c)return;
+  const st=stories.find(x=>x.id===stId);
+  const text=document.getElementById('stOSText').value.trim();
+  if(!text)return;
+  c.storyOS=(c.storyOS?c.storyOS+'\n\n':'')+`【${st?st.title:'物語'}より】\n`+text;
+  saveChars();closeSheet();toast('物語OSに追記しました（キャラ編集で確認・編集できます）');
+}
+function storyScore(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  const judges=chars.filter(c=>c.id!==st.leadId);
+  if(!judges.length){toast('採点できるキャラがいません');return}
+  window._jCb=async(j)=>{
+    closeSheet();toast(j.name+'が採点しています…');
+    const params=rpgParams();
+    const prompt=`次の物語を読んで、主役（${(chars.find(c=>c.id===st.leadId)||{name:'？'}).name}）を採点してください。\n\n${st.text.slice(0,8000)}\n\n---\n採点項目（各10点満点）: ${params.join('、')}\nあなた（${j.name}）らしい辛口も愛も込めた講評コメントも1〜3文で。\n次のJSONだけを出力: {"scores":{${params.map(p=>'"'+p+'":点数').join(',')}},"comment":"講評"}`;
+    try{
+      const raw=await callProvider(j.provider,j.model,j.os||'',[{role:'user',content:prompt}],800);
+      const data=JSON.parse(raw.replace(/```json|```/g,'').trim());
+      st.scores=st.scores||[];
+      st.scores.push({judgeId:j.id,scores:data.scores||{},comment:data.comment||'',ts:Date.now()});
+      saveStories();renderStory();openStoryView(id);
+      toast('採点が届きました🎯');
+    }catch(e){showError(e)}
+  };
+  openSheet(`<div class="sheettitle">🎯 誰に採点してもらう？</div>`+judges.map((j,i)=>
+    `<div class="sheetitem" onclick="window._jCb(chars.filter(c=>c.id!=='${st.leadId}')[${i}])">${avatarHtml(j,'avatar sm')}${esc(j.name)}</div>`).join(''));
+}
+function openJobSheet(cid){
+  const c=chars.find(x=>x.id===cid);if(!c)return;
+  openSheet(`
+    <div class="sheettitle">${esc(c.name)}の冒険者カード</div>
+    <div class="memcard" style="margin:0 0 12px">
+      <div class="mt"><b>Lv.${charLevel(cid)}</b>（累計 ${charPoints(cid)}pt ／ 次のレベルまで ${levelStep()-charPoints(cid)%levelStep()}pt）</div>
+    </div>
+    <div class="field"><label>ジョブ（称号）</label><input type="text" id="jobText" value="${c.rpgJob?esc(c.rpgJob):''}" placeholder="未認定"></div>
+    <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="rollJob('${cid}')">🎲 AIにジョブを考えさせる</button></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">閉じる</button><button class="btn" onclick="saveJob('${cid}')">保存</button></div>`);
+}
+function saveJob(cid){
+  const c=chars.find(x=>x.id===cid);if(!c)return;
+  c.rpgJob=document.getElementById('jobText').value.trim();
+  saveChars();closeSheet();renderStory();
+}
+async function rollJob(cid){
+  const c=chars.find(x=>x.id===cid);if(!c)return;
+  if(!settings.anthropicKey){toast('Anthropicキーが必要です');return}
+  toast('ジョブ査定中…');
+  const myStories=stories.filter(st=>st.leadId===cid);
+  const summary=myStories.slice(-5).map(st=>{
+    const totals={};
+    (st.scores||[]).forEach(sc=>Object.entries(sc.scores||{}).forEach(([k,v])=>{totals[k]=(totals[k]||0)+(+v||0)}));
+    return `「${st.title}」評点:${JSON.stringify(totals)} 講評:${(st.scores||[]).map(s=>s.comment).join('/')}`;
+  }).join('\n');
+  const prompt=`RPGのジョブ名（称号）をひとつ考えて。対象: ${c.name}（Lv.${charLevel(cid)}）\n最近の戦績:\n${summary||'戦績なし'}\n条件: 日本語で7文字前後、履歴の傾向を突いた、思わず笑ってしまうが本人の名誉も少し守る絶妙な称号。称号だけを出力。`;
+  try{
+    const job=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:prompt}],60);
+    document.getElementById('jobText').value=job.trim().replace(/["「」]/g,'');
+  }catch(e){showError(e)}
+}
+
 /* ================= 診断 ================= */
 function checkKeyChars(label,key){
   if(!key)return label+': 未入力';
@@ -2100,6 +2408,7 @@ setInterval(checkInbox,90000);
 applyFont();
 updateSyncDot();
 renderTalks();
+mmShowWelcome();
 renderSettings();
 updatePwaStatus();
 checkInbox();
