@@ -267,21 +267,33 @@ async function runSilSched(env) {
     if (!schedRaw) return out;
     const items = JSON.parse(schedRaw);
     const silSub = await env.MM_KV.get("sub_silente");
-    let changed = false;
+    const log = JSON.parse((await env.MM_KV.get("sil_log")) || "[]");
+    const jst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(5, 16).replace("T", " ");
+    let changed = false, logChanged = false;
     for (const it of items) {
       if (it.n) continue;
       const due = it.atMs != null ? it.atMs : (Date.parse(it.at) - 9 * 3600 * 1000);
       if (due <= Date.now()) {
-        it.n = 1; changed = true;
-        if (silSub) {
-          try {
-            await sendPush(JSON.parse(silSub), { title: "⏰ " + (it.note || "約束の時間"), body: "約束の時間だよ。開くと届く。", url: "./" }, env);
-            out.push({ silente: it.note, pushed: 201 });
-          } catch (e) { out.push({ silente: it.note, error: e.message }); }
+        if (!silSub) {
+          // 購読が無い間は処理済みにしない（購読後の実行でリトライされる）
+          log.push({ 時刻: jst(), 予定: it.note, 結果: "❌購読なし（sub_silente未登録。Silenteの🔔を押して）" });
+          logChanged = true;
+          continue;
         }
+        it.n = 1; changed = true;
+        try {
+          const st = await sendPush(JSON.parse(silSub), { title: "⏰ " + (it.note || "約束の時間"), body: "約束の時間だよ。開くと届く。", url: "./" }, env);
+          log.push({ 時刻: jst(), 予定: it.note, 結果: st === 201 ? "✅送信成功(201)" : "⚠️応答" + st });
+          out.push({ silente: it.note, pushed: st });
+        } catch (e) {
+          log.push({ 時刻: jst(), 予定: it.note, 結果: "❌送信エラー: " + e.message });
+          out.push({ silente: it.note, error: e.message });
+        }
+        logChanged = true;
       }
     }
     if (changed) await env.MM_KV.put("sil_sched", JSON.stringify(items));
+    if (logChanged) await env.MM_KV.put("sil_log", JSON.stringify(log.slice(-10)));
   } catch (e) { out.push({ silente: "sched-error", error: String(e.message || e) }); }
   return out;
 }
@@ -370,7 +382,8 @@ export default {
           判定: !c.auto ? "❌自発OFF" : !inWindow ? "❌時間帯外" : gapLeftMin > 0 ? "❌間隔待ち" : "🎲抽選対象",
         };
       });
-      return json({ 現在時刻JST: jstStr(d), chars, silente予定: sched });
+      const silLog = JSON.parse((await env.MM_KV.get("sil_log")) || "[]");
+      return json({ 現在時刻JST: jstStr(d), chars, silente予定: sched, silente通知ログ: silLog });
     }
     if (path === "/run") {
       // 手動でcronロジックを即実行（テスト用・確率無視）
