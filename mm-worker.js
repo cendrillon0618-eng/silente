@@ -270,7 +270,8 @@ async function runSilSched(env) {
     let changed = false;
     for (const it of items) {
       if (it.n) continue;
-      if (new Date(it.at).getTime() <= Date.now()) {
+      const due = it.atMs != null ? it.atMs : (Date.parse(it.at) - 9 * 3600 * 1000);
+      if (due <= Date.now()) {
         it.n = 1; changed = true;
         if (silSub) {
           try {
@@ -289,7 +290,7 @@ async function runSilSched(env) {
 export default {
   async scheduled(event, env, ctx) {
     // 5分刻みのトリガーはSilente予定通知だけを担当、30分刻みは全部
-    if (event.cron && event.cron.includes("/5")) {
+    if (event.cron && (event.cron.startsWith("*/10") || event.cron.startsWith("*/5"))) {
       ctx.waitUntil(runSilSched(env));
     } else {
       ctx.waitUntil(runCron(env, false));
@@ -366,34 +367,10 @@ export default {
           あと何分で送信可能: gapLeftMin,
           "1回あたりの当選率": Math.round(Math.min(1, (c.perDay ?? 2) / slots) * 1000) / 10 + "%",
           朝の保証枠: c.morningHour != null ? c.morningHour + "時台" : "なし",
+          判定: !c.auto ? "❌自発OFF" : !inWindow ? "❌時間帯外" : gapLeftMin > 0 ? "❌間隔待ち" : "🎲抽選対象",
         };
       });
       return json({ 現在時刻JST: jstStr(d), chars, silente予定: sched });
-    }
-    if (path === "/debug") {
-      const config = JSON.parse((await env.MM_KV.get("config")) || "null");
-      const state = JSON.parse((await env.MM_KV.get("state")) || "{}");
-      const d = nowJST();
-      const hour = d.getUTCHours();
-      if (!config || !config.chars) return json({ error: "config未設定。アプリで同期を押して" });
-      const rows = config.chars.map((char) => {
-        const start = char.hourStart ?? 8, end = char.hourEnd ?? 23;
-        const inWindow = start <= end ? hour >= start && hour < end : hour >= start || hour < end;
-        const last = state[char.name] || 0;
-        const gapMin = last ? Math.round((Date.now() - last) / 60000) : null;
-        const gapOk = Date.now() - last >= (char.minGapHours ?? 3) * 3600 * 1000;
-        const slots = ((end - start + 24) % 24 || 24) * 2;
-        const p = Math.min(1, (char.perDay ?? 2) / slots);
-        return {
-          name: char.name, auto: !!char.auto, morningHour: char.morningHour ?? null,
-          時間帯: start + "時〜" + end + "時", いまJST: hour + "時", 時間帯内: inWindow,
-          前回送信からの分: gapMin, 間隔OK: gapOk,
-          毎回の当選率: Math.round(p * 1000) / 10 + "%",
-          判定: !char.auto ? "❌自発OFF" : !inWindow ? "❌時間帯外" : !gapOk ? "❌間隔待ち" : "🎲抽選対象",
-        };
-      });
-      const sched = JSON.parse((await env.MM_KV.get("sil_sched")) || "[]");
-      return json({ いまJST: jstStr(d), chars: rows, silente予定: sched });
     }
     if (path === "/run") {
       // 手動でcronロジックを即実行（テスト用・確率無視）
