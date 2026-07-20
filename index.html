@@ -112,6 +112,16 @@ textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
 .convoGroup .gCount{opacity:.55;font-size:11px}
 .convoGroup.closed{opacity:.5}
 .cMeta{font-size:10.5px;color:var(--text);opacity:.5;margin-top:3px}
+#welcome{position:fixed;inset:0;z-index:999;display:none;flex-direction:column;align-items:center;justify-content:flex-end;
+  background:#0E1220 center/cover no-repeat;padding:0 24px calc(90px + env(safe-area-inset-bottom))}
+#welcome.on{display:flex}
+#welcome .wShade{position:absolute;inset:0;background:linear-gradient(to top,rgba(10,12,24,.82) 0%,rgba(10,12,24,.15) 45%,rgba(10,12,24,.25) 100%)}
+#welcome .wBody{position:relative;text-align:center;max-width:560px}
+#welcome .wChar{font-family:Georgia,serif;font-style:italic;font-size:15px;color:var(--accent);letter-spacing:.14em;margin-bottom:14px}
+#welcome .wMsg{font-size:22px;line-height:2;color:#F2EFEA;white-space:pre-wrap;text-shadow:0 2px 14px rgba(0,0,0,.5)}
+#welcome .wHint{position:relative;margin-top:34px;font-size:11px;letter-spacing:.2em;color:rgba(242,239,234,.55)}
+#welcome .wAudio{position:absolute;top:calc(20px + env(safe-area-inset-top));right:20px;width:42px;height:42px;border-radius:50%;
+  background:rgba(20,24,40,.6);color:#F2EFEA;font-size:18px;display:flex;align-items:center;justify-content:center}
 
 /* ===== sheet(modal) ===== */
 #sheetWrap{position:fixed;inset:0;z-index:20;display:none}
@@ -188,6 +198,15 @@ textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
 </style>
 </head>
 <body>
+<div id="welcome">
+  <div class="wShade"></div>
+  <button class="wAudio" id="wAudioBtn" style="display:none">🔈</button>
+  <div class="wBody">
+    <div class="wChar" id="wChar"></div>
+    <div class="wMsg" id="wMsg"></div>
+    <div class="wHint">TAP TO ENTER</div>
+  </div>
+</div>
 <div id="app">
   <div id="topbar">
     <button id="btnMenu" aria-label="メニュー">
@@ -233,6 +252,7 @@ textarea,input,select{font-family:var(--sans);font-size:16px;color:var(--text)}
     <button id="btnUsage">💰 使用量</button>
     <button id="btnFavs">🩷 お気に入り</button>
     <button id="btnSched">⏰ 予定メッセージ</button>
+    <button id="btnWelcome">🚪 おかえり画面</button>
     <button id="btnMemory">🌙 メモリ</button>
     <button id="btnKnowledge">📁 ナレッジ</button>
     <button id="btnSettings">⚙ 設定</button>
@@ -318,6 +338,7 @@ function load(){
     if(s.elevenKey===undefined) s.elevenKey="";
     if(s.readDictText===undefined) s.readDictText="";
     if(s.mmOn===undefined){ s.mmOn=false; s.mmUrl=""; s.mmToken=""; s.mmCache=null; }
+    if(!s.welcome) s.welcome={on:true, charMode:true, image:null, audio:null, charMsgs:"", fixedMsgs:"おかえり。\nよく帰ってきたね。\n今日もお疲れさま。"};
     const aoi=s.presets.find(p=>p.id==="p_aoi");
     if(aoi && aoi.name==="🌙 葵") aoi.name="🩵 葵";
     return s;
@@ -1112,6 +1133,98 @@ function setStreamUI(on){
 function openDrawer(){ drawerEl.classList.add("on"); overlayEl.classList.add("on"); }
 function closeDrawer(){ drawerEl.classList.remove("on"); overlayEl.classList.remove("on"); }
 
+/* ============ おかえり画面 ============ */
+let wAudioObj=null;
+function showWelcome(){
+  const w=S.welcome||{};
+  if(!w.on) return;
+  const el=$("#welcome");
+  el.style.backgroundImage=w.image?`url(${w.image})`:"";
+  let char="", msg="";
+  const parseLines=(t)=>String(t||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if(w.charMode){
+    const lines=parseLines(w.charMsgs).map(l=>{
+      const i=l.search(/[＝=]/);
+      return i>0?{char:l.slice(0,i).trim(),text:l.slice(i+1).trim()}:null;
+    }).filter(Boolean);
+    if(lines.length){
+      const pick=lines[Math.floor(Math.random()*lines.length)];
+      char=pick.char; msg=pick.text;
+    }
+  }
+  if(!msg){
+    const fx=parseLines(w.fixedMsgs);
+    msg=fx.length?fx[Math.floor(Math.random()*fx.length)]:"おかえり。";
+  }
+  $("#wChar").textContent=char;
+  $("#wMsg").textContent=msg;
+  const ab=$("#wAudioBtn");
+  if(w.audio){
+    ab.style.display="flex";
+    wAudioObj=new Audio(w.audio);
+    wAudioObj.play().catch(()=>{}); // 自動再生がブロックされたら🔈で
+    ab.onclick=(e)=>{ e.stopPropagation(); wAudioObj.currentTime=0; wAudioObj.play(); };
+  }else{ ab.style.display="none"; }
+  el.classList.add("on");
+  el.onclick=()=>{ el.classList.remove("on"); if(wAudioObj){/* 再生は続けてよい */} openDrawer(); };
+}
+function fileToDataURL(file,maxW,cb){
+  if(file.type.startsWith("image/")){
+    const r=new FileReader();
+    r.onload=()=>{ const img=new Image(); img.onload=()=>{
+      let w=img.width,h=img.height;
+      const m=maxW||1000;
+      if(Math.max(w,h)>m){const k=m/Math.max(w,h);w=Math.round(w*k);h=Math.round(h*k)}
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      cb(c.toDataURL("image/jpeg",0.82));
+    }; img.src=r.result; };
+    r.readAsDataURL(file);
+  }else{
+    if(file.size>2500000){ alert("音声が大きすぎるよ（2.5MBまで）。短めに切ってね"); return; }
+    const r=new FileReader();
+    r.onload=()=>cb(r.result);
+    r.readAsDataURL(file);
+  }
+}
+function openWelcomeSettings(){
+  const w=S.welcome||{};
+  openSheet(`
+    <h3>🚪 おかえり画面</h3>
+    <div class="field"><div class="optRow"><span>アプリを開いたときに表示する</span><div class="toggle ${w.on?"on":""}" id="wOn"></div></div></div>
+    <div class="field"><div class="optRow"><span>キャラからのおかえり（OFFで固定メッセージ）</span><div class="toggle ${w.charMode?"on":""}" id="wCharMode"></div></div></div>
+    <div class="field"><label>キャラ別メッセージ（1行「キャラ名＝ことば」。増やすほどランダムが豊かに）</label>
+      <textarea id="wCharMsgs" style="min-height:110px" placeholder="葵＝おかえり。待ってた。&#10;葵＝顔見せて。&#10;灯＝おかえり、かのん。">${esc(w.charMsgs||"")}</textarea></div>
+    <div class="field"><label>固定メッセージ（キャラOFF時・キャラ未設定時にランダム表示）</label>
+      <textarea id="wFixedMsgs" style="min-height:80px">${esc(w.fixedMsgs||"")}</textarea></div>
+    <div class="field"><label>待受画像 ${w.image?"（設定済み）":""}</label>
+      <div class="rowBtns"><button id="wImgPick">🖼 画像を選ぶ</button><button id="wImgClear">画像を消す</button></div>
+      <input type="file" id="wImgFile" accept="image/*" style="display:none"></div>
+    <div class="field"><label>おかえりボイス ${w.audio?"（設定済み）":""}</label>
+      <div class="rowBtns"><button id="wAudPick">🔈 音声を選ぶ</button><button id="wAudClear">音声を消す</button></div>
+      <input type="file" id="wAudFile" accept="audio/*" style="display:none">
+      <div class="hint">短い音声（2.5MBまで・10秒前後推奨）。iOSの制限で自動再生されないときは画面右上の🔈で鳴らせる。ElevenLabsで作ってmp3保存したやつがそのまま使えるよ。</div></div>
+    <div class="rowBtns" style="margin-top:14px"><button id="wPreview">▶ プレビュー</button><button id="wSave">保存</button><button id="wClose">閉じる</button></div>`);
+  $("#wOn").onclick=()=>$("#wOn").classList.toggle("on");
+  $("#wCharMode").onclick=()=>$("#wCharMode").classList.toggle("on");
+  $("#wImgPick").onclick=()=>$("#wImgFile").click();
+  $("#wImgFile").onchange=(e)=>{ if(e.target.files[0]) fileToDataURL(e.target.files[0],1000,(u)=>{ S.welcome.image=u; save(); alert("画像を設定したよ"); }); };
+  $("#wImgClear").onclick=()=>{ S.welcome.image=null; save(); alert("画像を消したよ"); };
+  $("#wAudPick").onclick=()=>$("#wAudFile").click();
+  $("#wAudFile").onchange=(e)=>{ if(e.target.files[0]) fileToDataURL(e.target.files[0],0,(u)=>{ S.welcome.audio=u; save(); alert("音声を設定したよ"); }); };
+  $("#wAudClear").onclick=()=>{ S.welcome.audio=null; save(); alert("音声を消したよ"); };
+  const grab=()=>{
+    S.welcome.on=$("#wOn").classList.contains("on");
+    S.welcome.charMode=$("#wCharMode").classList.contains("on");
+    S.welcome.charMsgs=$("#wCharMsgs").value;
+    S.welcome.fixedMsgs=$("#wFixedMsgs").value;
+    save();
+  };
+  $("#wSave").onclick=()=>{ grab(); closeSheet(); };
+  $("#wPreview").onclick=()=>{ grab(); closeSheet(); closeDrawer(); const keep=S.welcome.on; S.welcome.on=true; showWelcome(); S.welcome.on=keep; };
+  $("#wClose").onclick=closeSheet;
+}
+
 /* ============ 通知（Service Worker / Push） ============ */
 let silSW=null;
 if("serviceWorker" in navigator){
@@ -1362,6 +1475,7 @@ function openSettings(){
   $("#fThink").onclick=()=>$("#fThink").classList.toggle("on");
   $("#fMMOn").onclick=()=>$("#fMMOn").classList.toggle("on");
   $("#fSilPush").onclick=silSubscribePush;
+
   $("#fSilTest").onclick=silTestPush;
   $("#fSave").onclick=()=>{
     S.apiKey=$("#fKey").value.trim();
@@ -2835,6 +2949,7 @@ $("#btnPresets").onclick=openPresets;
 $("#btnImageGen").onclick=openImageGen;
 $("#btnUsage").onclick=openUsage;
 $("#btnFavs").onclick=openFavs;
+$("#btnWelcome").onclick=()=>{ closeDrawer(); openWelcomeSettings(); };
 $("#btnSched").onclick=openSchedules;
 $("#sheetBg").onclick=closeSheet;
 convoTitleEl.onclick=openConvoMenu;
@@ -2877,6 +2992,8 @@ setInterval(checkSchedules, 30000);
 
 /* Makemarry共有記憶の自動取得（起動時） */
 try{ if(S.mmOn && S.mmUrl && S.mmToken) fetchMMShared(false); }catch(e){}
+/* おかえり画面 */
+try{ showWelcome(); }catch(e){}
 </script>
 </body>
 </html>
