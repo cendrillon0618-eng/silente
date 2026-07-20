@@ -1139,7 +1139,7 @@ async function silSubscribePush(){
 async function syncSilSched(){
   if(!S.mmUrl||!S.mmToken) return;
   try{
-    const items=(S.schedules||[]).filter(x=>!x.done).map(x=>({id:x.id,at:x.at,note:x.note}));
+    const items=(S.schedules||[]).filter(x=>!x.done).map(x=>({id:x.id,at:x.at,atMs:new Date(x.at).getTime(),note:x.note}));
     await fetch(S.mmUrl+"/silente-sched",{method:"POST",headers:{"content-type":"application/json","x-mm-token":S.mmToken},body:JSON.stringify({items})});
   }catch(e){}
 }
