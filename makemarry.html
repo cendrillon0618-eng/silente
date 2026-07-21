@@ -342,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.2.1</div>
+      <div class="note">Makemarry v5.3</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -2162,6 +2162,28 @@ function charPoints(cid){
   return t;
 }
 function charLevel(cid){return Math.floor(charPoints(cid)/levelStep())+1}
+function charStats(cid){
+  const totals={};
+  rpgParams().forEach(p=>totals[p]=0);
+  stories.filter(st=>st.leadId===cid).forEach(st=>(st.scores||[]).forEach(sc=>{
+    Object.entries(sc.scores||{}).forEach(([k,v])=>{totals[k]=(totals[k]||0)+(+v||0)});
+  }));
+  return totals;
+}
+function charItems(cid){
+  const its=[];
+  stories.filter(st=>st.leadId===cid&&st.card&&st.card.item).forEach(st=>{
+    if(!its.includes(st.card.item))its.push(st.card.item);
+  });
+  return its;
+}
+function charNicknames(cid){
+  const ns=[];
+  stories.filter(st=>st.leadId===cid&&st.card&&st.card.nickname).forEach(st=>{
+    if(!ns.includes(st.card.nickname))ns.push(st.card.nickname);
+  });
+  return ns;
+}
 function editRpgParams(){
   openSheet(`
     <div class="sheettitle">⚙️ RPG設定</div>
@@ -2492,17 +2514,157 @@ function openJobSheet(cid){
   const c=chars.find(x=>x.id===cid);if(!c)return;
   openSheet(`
     <div class="sheettitle">${esc(c.name)}の冒険者カード</div>
+    <div class="avatarpick">
+      <div id="rpgAvPrev">${c.rpgIcon?`<div class="avatar" style="width:64px;height:64px;border-radius:12px"><img src="${c.rpgIcon}"></div>`:avatarHtml(c)}</div>
+      <button class="minilink" onclick="document.getElementById('rpgIconFile').click()">RPG用の姿を選ぶ</button>
+      <input type="file" id="rpgIconFile" accept="image/*" style="display:none" onchange="pickRpgIcon('${cid}',this)">
+    </div>
     <div class="memcard" style="margin:0 0 12px">
       <div class="mt"><b>Lv.${charLevel(cid)}</b>（累計 ${charPoints(cid)}pt ／ 次のレベルまで ${levelStep()-charPoints(cid)%levelStep()}pt）</div>
     </div>
     <div class="field"><label>ジョブ（称号）</label><input type="text" id="jobText" value="${c.rpgJob?esc(c.rpgJob):''}" placeholder="未認定"></div>
     <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="rollJob('${cid}')">🎲 AIにジョブを考えさせる</button></div>
+    <div class="field"><label>本人のコメント（遺憾の意・編集可）</label><textarea id="rpgCmt" style="min-height:70px" placeholder="称号への本人の言い分">${c.rpgComment?esc(c.rpgComment):''}</textarea></div>
+    <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="rollRpgComment('${cid}')">💬 本人に言わせる</button><button class="btn ghost" onclick="document.getElementById('rpgCmt').value=''">消す</button></div>
+    <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="saveJob('${cid}',true)">🏆 ステータス画面を画像にする</button></div>
     <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">閉じる</button><button class="btn" onclick="saveJob('${cid}')">保存</button></div>`);
 }
-function saveJob(cid){
+function pickRpgIcon(cid,inp){
+  if(!inp.files[0])return;
+  resizeImage(inp.files[0],400,u=>{
+    const c=chars.find(x=>x.id===cid);
+    c.rpgIcon=u;saveChars();
+    document.getElementById('rpgAvPrev').innerHTML=`<div class="avatar" style="width:64px;height:64px;border-radius:12px"><img src="${u}"></div>`;
+    toast('RPGの姿を設定しました');
+  });
+}
+async function rollRpgComment(cid){
+  const c=chars.find(x=>x.id===cid);if(!c)return;
+  const job=document.getElementById('jobText').value.trim()||c.rpgJob||'未認定';
+  const ns=charNicknames(cid).join('、')||'なし';
+  const its=charItems(cid).join('、')||'なし';
+  toast(c.name+'が言い分を考えています…');
+  const prompt=`あなた（${c.name}）はRPGで称号「${job}」、二つ名「${ns}」、アイテム「${its}」を授与されました。ステータス画面に載せる本人コメントを、遺憾さと諦めと本人らしさが滲む1〜2文で。前置きなし、コメントだけ出力。`;
+  try{
+    const cm=await callProvider(c.provider,c.model,c.os||'',[{role:'user',content:prompt}],200);
+    document.getElementById('rpgCmt').value=cm.trim();
+  }catch(e){showError(e)}
+}
+function saveJob(cid,makeCard){
   const c=chars.find(x=>x.id===cid);if(!c)return;
   c.rpgJob=document.getElementById('jobText').value.trim();
+  c.rpgComment=document.getElementById('rpgCmt').value.trim();
   saveChars();closeSheet();renderStory();
+  if(makeCard)makeStatusCard(cid);
+}
+async function makeStatusCard(cid){
+  const c=chars.find(x=>x.id===cid);if(!c)return;
+  toast('ステータス画面を描いています…');
+  const stats=Object.entries(charStats(cid));
+  const items=charItems(cid).slice(-5);
+  const nicks=charNicknames(cid).slice(-3);
+  const cmt=c.rpgComment||'';
+  const W=1080;
+  const cv0=document.createElement('canvas');
+  const m0=cv0.getContext('2d');
+  m0.font='400 34px "Hiragino Kaku Gothic ProN",sans-serif';
+  const cmtLines=cmt?wrapLines(m0,cmt,W-260):[];
+  const H=760+stats.length*58+(nicks.length?70+nicks.length*54:0)+(items.length?70+items.length*54:0)+(cmt?110+cmtLines.length*52:0)+120;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const c2=cv.getContext('2d');
+  // 背景（漆黒）
+  c2.fillStyle='#07070F';c2.fillRect(0,0,W,H);
+  // FF風の青窓＋二重白枠
+  const wx=36,wy=36,ww=W-72,wh=H-72;
+  const wg=c2.createLinearGradient(0,wy,0,wy+wh);
+  wg.addColorStop(0,'#1B2C7A');wg.addColorStop(1,'#0A1240');
+  c2.fillStyle=wg;
+  c2.beginPath();c2.roundRect(wx,wy,ww,wh,26);c2.fill();
+  c2.strokeStyle='#FFFFFF';c2.lineWidth=8;
+  c2.beginPath();c2.roundRect(wx+6,wy+6,ww-12,wh-12,22);c2.stroke();
+  c2.lineWidth=2;
+  c2.beginPath();c2.roundRect(wx+20,wy+20,ww-40,wh-40,16);c2.stroke();
+  // 顔グラ（角ばった枠・DQ風）
+  const av=await loadImg(c.rpgIcon||c.icon);
+  const ax=wx+70,ay=wy+70,as_=200;
+  c2.save();c2.beginPath();c2.roundRect(ax,ay,as_,as_,10);c2.clip();
+  if(av){const s0=Math.min(av.width,av.height);c2.drawImage(av,(av.width-s0)/2,(av.height-s0)/2,s0,s0,ax,ay,as_,as_)}
+  else{c2.fillStyle='#223';c2.fillRect(ax,ay,as_,as_)}
+  c2.restore();
+  c2.strokeStyle='#FFD966';c2.lineWidth=4;
+  c2.beginPath();c2.roundRect(ax,ay,as_,as_,10);c2.stroke();
+  // 名前・Lv・ジョブ
+  c2.fillStyle='#FFF';c2.textAlign='left';
+  c2.font='700 56px "Hiragino Kaku Gothic ProN",sans-serif';
+  c2.fillText(c.name,ax+as_+50,ay+70);
+  c2.font='700 40px "Hiragino Kaku Gothic ProN",sans-serif';
+  c2.fillText('Lv '+charLevel(cid),ax+as_+50,ay+134);
+  c2.fillStyle='#9AD1FF';c2.font='400 30px sans-serif';
+  c2.fillText(charPoints(cid)+' pt',ax+as_+180,ay+134);
+  c2.fillStyle='#FFD966';c2.font='700 36px "Hiragino Kaku Gothic ProN",sans-serif';
+  const job=c.rpgJob||'冒険者';
+  c2.fillText('◆ '+job,ax+as_+50,ay+196);
+  // ステータス
+  let ty=ay+as_+90;
+  c2.fillStyle='#9AD1FF';c2.font='700 32px sans-serif';
+  c2.fillText('― ステータス ―',wx+70,ty);ty+=58;
+  for(const [k,v] of stats){
+    c2.fillStyle='#FFF';c2.font='400 36px "Hiragino Kaku Gothic ProN",sans-serif';
+    c2.fillText(k,wx+100,ty);
+    c2.textAlign='right';
+    c2.fillStyle='#FFD966';c2.font='700 36px sans-serif';
+    c2.fillText(String(v),W-wx-100,ty);
+    c2.textAlign='left';
+    ty+=58;
+  }
+  // 二つ名
+  if(nicks.length){
+    ty+=24;
+    c2.fillStyle='#9AD1FF';c2.font='700 32px sans-serif';
+    c2.fillText('― 二つ名 ―',wx+70,ty);ty+=54;
+    for(const n of nicks){
+      c2.fillStyle='#FFF';c2.font='400 34px "Hiragino Kaku Gothic ProN",sans-serif';
+      c2.fillText('『'+n+'』',wx+100,ty);ty+=54;
+    }
+  }
+  // もちもの
+  if(items.length){
+    ty+=24;
+    c2.fillStyle='#9AD1FF';c2.font='700 32px sans-serif';
+    c2.fillText('― もちもの ―',wx+70,ty);ty+=54;
+    for(const it of items){
+      c2.fillStyle='#FFF';c2.font='400 34px "Hiragino Kaku Gothic ProN",sans-serif';
+      c2.fillText('E　'+it,wx+100,ty);ty+=54;
+    }
+  }
+  // 本人コメント（下部のセリフ窓）
+  if(cmt){
+    ty+=30;
+    const bh=70+cmtLines.length*52;
+    c2.strokeStyle='#FFF';c2.lineWidth=3;
+    c2.beginPath();c2.roundRect(wx+50,ty,ww-100,bh,14);c2.stroke();
+    let cy=ty+58;
+    c2.fillStyle='#FFF';c2.font='400 34px "Hiragino Kaku Gothic ProN",sans-serif';
+    c2.fillText('＊「',wx+80,cy);
+    for(let i=0;i<cmtLines.length;i++){
+      c2.fillText(cmtLines[i]+(i===cmtLines.length-1?'」':''),wx+80+(i===0?70:0),cy);
+      cy+=52;
+    }
+    ty+=bh;
+  }
+  // 銘
+  if(settings.cardBrand){
+    c2.textAlign='center';
+    c2.fillStyle='#B25C77';c2.font='italic 400 26px Georgia,serif';
+    c2.fillText(settings.cardBrand,W/2,wy+wh-40);
+  }
+  cv.toBlob(async blob=>{
+    try{
+      const file=new File([blob],'冒険者_'+c.name+'.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]})}
+      else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name;a.click()}
+    }catch(err){if(err.name!=='AbortError')showError(err)}
+  },'image/png');
 }
 async function rollJob(cid){
   const c=chars.find(x=>x.id===cid);if(!c)return;
