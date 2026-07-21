@@ -155,6 +155,10 @@ img{display:block}
 .calday.today{background:var(--accent);color:#fff;font-weight:700}
 .calday .dot{font-size:8px;line-height:1;height:9px}
 .calday:active{background:var(--accent-soft)}
+.thk{font-size:12px;color:var(--sub);font-style:italic;background:rgba(255,255,255,.6);border-radius:12px;
+  padding:5px 11px;margin:0 4px 5px;line-height:1.6;white-space:pre-wrap}
+.stbody{background:var(--surface);border-radius:14px;padding:14px 16px;font-size:14.5px;line-height:1.9;
+  white-space:pre-wrap;max-height:46dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 1px 3px rgba(43,39,51,.06)}
 .keyrow{display:flex;gap:6px;align-items:center}
 .keyrow input{flex:1;min-width:0}
 .keybtn{width:38px;height:38px;border-radius:9px;background:var(--bg);border:1px solid var(--line);
@@ -303,6 +307,8 @@ img{display:block}
         </select>
       </div>
       <div class="checkrow"><input type="checkbox" id="setShortStyle" checked><label for="setShortStyle" style="font-size:14px">チャットらしい短文口調をキャラに指示する</label></div>
+      <div class="checkrow"><input type="checkbox" id="setThoughts"><label for="setThoughts" style="font-size:14px">💭 こころのなか（返事の前に本音の思考が見える）</label></div>
+      <div class="checkrow"><input type="checkbox" id="setExtThink"><label for="setExtThink" style="font-size:14px">🧠 密なモード（Claude拡張思考。1通+2〜8円）</label></div>
       <div class="checkrow"><input type="checkbox" id="setAutoCompact" checked><label for="setAutoCompact" style="font-size:14px">長い会話の自動圧縮（80通超で本人が記憶にまとめて履歴を軽くする）</label></div>
       <div class="field"><label>最大応答トークン</label><input type="number" id="setMaxTokens" value="1024"></div>
       <div class="field"><label>APIに送る履歴の件数</label><input type="number" id="setHistLimit" value="40"></div>
@@ -336,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.1</div>
+      <div class="note">Makemarry v5.2</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -843,6 +849,7 @@ function msgHtml(m){
     ${avatarHtml(c||{name:'？'},'avatar sm')}
     <div class="msgcol">
       ${showName?`<div class="msgname">${esc(c?c.name:'？')}</div>`:''}
+      ${m.think&&settings.thoughts?`<div class="thk">💭 ${esc(m.think)}</div>`:''}
       <div class="${bcls}">${body}</div>
     </div>
     ${vbtn}
@@ -932,7 +939,7 @@ function voiceActive(c){
     && (!curTalk||curTalk.voiceMute!==true);
 }
 async function getVoiceBlob(m,c){
-  const vkey=m.id+'|'+(c.voiceModel||'v2')+'|'+(c.vStability??0.4)+'|'+(c.vStyle??0.4);
+  const vkey=m.id+'|'+(c.voiceModel||'v2')+'|'+(c.vStability??0.4)+'|'+(c.vStyle??0.4)+'|'+m.text;
   if(voiceCache[vkey])return voiceCache[vkey];
   toast(c.name+'の声を生成中…');
   let speakText=m.text;
@@ -1216,6 +1223,11 @@ function showTyping(c){
 }
 function hideTyping(){const t=document.getElementById('typing');if(t)t.remove()}
 
+function extractKokoro(text){
+  const m=/<kokoro>([\s\S]*?)<\/kokoro>/.exec(text);
+  if(!m)return {clean:text,think:''};
+  return {clean:text.replace(m[0],'').trim(),think:m[1].trim()};
+}
 function extractEvents(text){
   const found=[];
   const re=/<event\s+([^>]*?)\/?>(?:<\/event>)?/g;
@@ -1245,8 +1257,9 @@ async function generateFor(c){
     const {clean,found}=extractEvents(text);
     registerCharEvents(found,c.name);
     text=clean||text;
+    const kk=extractKokoro(text);
+    const m={id:uid(),role:'char',charId:c.id,text:kk.clean,think:kk.think,ts:Date.now()};
     hideTyping();
-    const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
     pushMsg(m);appendMsgEl(m);
     maybeAutoCompact();
   }catch(e){
@@ -1300,8 +1313,9 @@ async function runGroupTurn(){
       const {clean,found}=extractEvents(text);
       registerCharEvents(found,c.name);
       text=clean||text;
+      const kk=extractKokoro(text);
       hideTyping();
-      const m={id:uid(),role:'char',charId:c.id,text,ts:Date.now()};
+      const m={id:uid(),role:'char',charId:c.id,text:kk.clean,think:kk.think,ts:Date.now()};
       pushMsg(m);appendMsgEl(m);
     }catch(e){hideTyping();showError(e);break}
   }
@@ -1347,7 +1361,7 @@ function buildSystem(c){
   if(curTalk.memory)sys+=`\n\n【記憶（これまでの経緯・自分でまとめたもの）】\n${curTalk.memory}`;
   const mem=(album[c.id]||[]).slice(-10).map(e=>'・'+e.text).join('\n');
   if(mem)sys+=`\n\n【思い出（自分で残した大切な記録）】\n${mem}`;
-  const ev=eventsForPrompt();
+  const ev=eventsForPrompt(c.id);
   if(ev)sys+=`\n\n【${userName()}とのこれからの予定】\n${ev}`;
   sys+=`\n\n【現在時刻】いまは ${nowStr()}。会話に時間が空いた場合は「（○○経過）」の注記が入る。時間帯や経過を自然に踏まえてよいが、毎回言及する必要はない。`;
   sys+=`\n\n【予定登録】${userName()}から予定に入れるよう頼まれたとき、または二人で日時を決めたときだけ、返事の末尾に次の形式のタグを1行で付ける：<event date="YYYY-MM-DD" time="HH:MM" title="予定の内容"/>（時間未定ならtime省略可）。タグは画面には表示されず、アプリの予定表に自動登録される。頼まれていないのに勝手に登録しない。`;
@@ -1357,6 +1371,9 @@ function buildSystem(c){
   }
   if(settings.shortStyle){
     sys+=`\n\n【形式】これはスマホのチャットアプリでの会話。地の文や情景描写ではなく、チャットとして自然な長さのメッセージで返す。`;
+  }
+  if(settings.thoughts){
+    sys+=`\n\n【こころのなか】返事の本文の前に、いま心の中で思っていること（相手には言わない本音）を日本語1〜3文で<kokoro>タグに書く。例：<kokoro>……不意打ちは心臓に悪い。</kokoro>そのあとに普通の返事。`;
   }
   if(curTalk.night){
     if(settings.nightOS)sys+=`\n\n【最優先指示・夜プロンプト（共通）】ここから先の指示は他のすべてに優先する。\n${settings.nightOS}`;
@@ -1374,6 +1391,7 @@ function buildTranscript(c){
     const mine=m.role==='char'&&m.charId===c.id;
     const role=mine?'assistant':'user';
     let text=m.text||'';
+    if(mine&&m.think)text='<kokoro>'+m.think+'</kokoro>'+text;
     if(prevTs&&m.ts-prevTs>=30*60000&&role==='user'){
       text='（'+gapStr(m.ts-prevTs)+'経過）\n'+text;
     }
@@ -1434,6 +1452,10 @@ function toAnthropicMsgs(blocks){
 async function anthropicCall(model,system,messages,maxTokens){
   if(!settings.anthropicKey)throw new Error('AnthropicのAPIキーが未設定です');
   const body={model,max_tokens:maxTokens,messages:toAnthropicMsgs(messages)};
+  if(settings.extThink&&model.startsWith('claude')&&!model.includes('haiku')){
+    body.thinking={type:'enabled',budget_tokens:2048};
+    body.max_tokens=Math.max(maxTokens+2048,4096);
+  }
   if(system)body.system=[{type:'text',text:system,cache_control:{type:'ephemeral'}}];
   const res=await fetchT('https://api.anthropic.com/v1/messages',{
     method:'POST',
@@ -1555,6 +1577,8 @@ function renderSettings(){
   document.getElementById('setFont').value=settings.font||'gothic';
   document.getElementById('setShortStyle').checked=settings.shortStyle!==false;
   document.getElementById('setAutoCompact').checked=settings.autoCompact!==false;
+  document.getElementById('setThoughts').checked=!!settings.thoughts;
+  document.getElementById('setExtThink').checked=!!settings.extThink;
   document.getElementById('setMaxTokens').value=settings.maxTokens||1024;
   document.getElementById('setHistLimit').value=settings.histLimit||40;
   try{
@@ -1651,6 +1675,8 @@ function saveSettings(){
     font:document.getElementById('setFont').value,
     shortStyle:document.getElementById('setShortStyle').checked,
     autoCompact:document.getElementById('setAutoCompact').checked,
+    thoughts:document.getElementById('setThoughts').checked,
+    extThink:document.getElementById('setExtThink').checked,
     maxTokens:parseInt(document.getElementById('setMaxTokens').value)||1024,
     histLimit:parseInt(document.getElementById('setHistLimit').value)||40
   };
@@ -1805,7 +1831,7 @@ function renderSchedule(){
     html+=`<div class="evcard" onclick="editEvent('${e.id}')">
       <div class="evdate ${diff===0?'today':''}"><div class="dd">${d.getDate()}</div><div class="dw">${days[d.getDay()]}</div></div>
       <div class="evbody">
-        <div class="evtitle">${e.annual?'🎀 ':''}${esc(e.title)}${e.annual&&annivYears(e)>0?`<span style="font-size:12px;color:var(--accent-deep)">（${annivYears(e)}周年）</span>`:''}</div>
+        <div class="evtitle">${e.annual?'🎀 ':''}${e.ownerId?(()=>{const o=chars.find(c=>c.id===e.ownerId);return o?avatarHtml(o,'avatar sm').replace('avatar sm','avatar sm" style="width:20px;height:20px;display:inline-flex;vertical-align:middle;margin-right:4px')+' ':''})():''}${esc(e.title)}${e.annual&&annivYears(e)>0?`<span style="font-size:12px;color:var(--accent-deep)">（${annivYears(e)}周年）</span>`:''}</div>
         <div class="evmeta">${e.time?'🕐 '+esc(e.time):''}${soon?`<span class="evsoon">${soon}</span>`:''}</div>
         ${(e.comments||[]).map(cm=>{
           const c=chars.find(x=>x.name===cm.by);
@@ -1844,6 +1870,11 @@ function editEvent(id){
     </div>
     <div class="field"><label>予定</label><input type="text" id="evTitle" value="${e?esc(e.title):''}" placeholder="例：指輪を見に行く"></div>
     <div class="checkrow"><input type="checkbox" id="evAnnual" ${e&&e.annual?'checked':''}><label for="evAnnual" style="font-size:14px">🎀 記念日（毎年繰り返す。キャラは忘れられない）</label></div>
+    <div class="field"><label>だれの予定・記念日？</label>
+      <select id="evOwner">
+        <option value="">みんな（全キャラに伝わる）</option>
+        ${chars.map(c=>`<option value="${c.id}" ${e&&e.ownerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select></div>
     <div class="btnrow" style="margin-bottom:10px">
       ${e?`<button class="btn ghost" onclick="eventComment('${e.id}')">💬 キャラから一言もらう</button>`:''}
     </div>
@@ -1859,8 +1890,9 @@ function saveEvent(id){
   const title=document.getElementById('evTitle').value.trim();
   if(!date||!title){toast('日付と予定を入れてください');return}
   const annual=document.getElementById('evAnnual').checked;
-  if(id){const e=events.find(x=>x.id===id);Object.assign(e,{date,time,title,annual})}
-  else{events.push({id:uid(),date,time,title,annual,comments:[]})}
+  const ownerId=document.getElementById('evOwner').value||null;
+  if(id){const e=events.find(x=>x.id===id);Object.assign(e,{date,time,title,annual,ownerId})}
+  else{events.push({id:uid(),date,time,title,annual,ownerId,comments:[]})}
   saveEvents();closeSheet();renderSchedule();toast('保存しました');
 }
 function deleteEvent(id){
@@ -1886,10 +1918,14 @@ function eventComment(id){
   openSheet(`<div class="sheettitle">誰に一言もらう？</div>`+chars.map((c,i)=>
     `<div class="sheetitem" onclick="window._evCb(chars[${i}])">${avatarHtml(c,'avatar sm')}${esc(c.name)}</div>`).join(''));
 }
-function eventsForPrompt(){
-  const list=upcomingEvents(14);
+function eventsForPrompt(charId){
+  let list=upcomingEvents(14);
+  if(charId)list=list.filter(e=>!e.ownerId||e.ownerId===charId);
   if(!list.length)return '';
-  return list.map(e=>`・${e.occ}${e.time?' '+e.time:''}：${e.title}${e.annual?`（🎀記念日${annivYears(e)>0?'・'+annivYears(e)+'周年':''}。絶対に忘れないこと）`:''}`).join('\n');
+  return list.map(e=>{
+    const owner=e.ownerId?(chars.find(c=>c.id===e.ownerId)||{}).name:'';
+    return `・${e.occ}${e.time?' '+e.time:''}：${e.title}${owner?`（${owner}の予定）`:''}${e.annual?`（🎀記念日${annivYears(e)>0?'・'+annivYears(e)+'周年':''}。絶対に忘れないこと）`:''}`;
+  }).join('\n');
 }
 
 /* ================= 思い出アルバム ================= */
@@ -2219,7 +2255,13 @@ function openStoryView(id){
   const lead=chars.find(c=>c.id===st.leadId);
   openSheet(`
     <div class="sheettitle">📜 ${esc(st.title)}</div>
-    <div class="field"><textarea readonly style="min-height:220px;line-height:1.8">${esc(st.text)}</textarea></div>
+    <div class="stbody">${esc(st.text)}</div>
+    <div class="btnrow" style="margin:10px 0 8px;gap:6px">
+      <button class="btn ghost" style="padding:9px" onclick="navigator.clipboard.writeText(stories.find(x=>x.id==='${id}').text).then(()=>toast('コピーしました'))">📋</button>
+      <button class="btn ghost" style="padding:9px" onclick="editStoryText('${id}')">✏️</button>
+      ${lead&&lead.voiceId&&settings.elevenKey?`<button class="btn ghost" style="padding:9px" onclick="playStoryVoice('${id}')">🔊</button>
+      <button class="btn ghost" style="padding:9px" onclick="saveStoryVoice('${id}')">🎧</button>`:''}
+    </div>
     ${(st.scores||[]).map(sc=>{
       const j=chars.find(c=>c.id===sc.judgeId);
       return `<div class="memcard" style="margin:0 0 10px">
@@ -2230,7 +2272,157 @@ function openStoryView(id){
     }).join('')}
     <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="storyToOS('${id}')">🧬 主役がOSにまとめる</button></div>
     <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="storyScore('${id}')">🎯 採点してもらう</button></div>
+    <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="makeStoryCard('${id}')">🃏 巻物カードにする</button></div>
     <div class="btnrow"><button class="btn danger" onclick="deleteStory('${id}')">削除</button><button class="btn" onclick="closeSheet()">閉じる</button></div>`);
+}
+function editStoryText(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  openSheet(`
+    <div class="sheettitle">✏️ 本文を編集</div>
+    <div class="field"><textarea id="stEdit" style="min-height:240px;line-height:1.8">${esc(st.text)}</textarea></div>
+    <div class="btnrow"><button class="btn ghost" onclick="openStoryView('${id}')">やめる</button><button class="btn" onclick="(function(){const st=stories.find(x=>x.id==='${id}');st.text=document.getElementById('stEdit').value;saveStories();openStoryView('${id}')})()">保存</button></div>`);
+}
+async function playStoryVoice(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  const lead=chars.find(c=>c.id===st.leadId);if(!lead)return;
+  if(st.text.length>1200&&!confirm('長文です（'+st.text.length+'字）。ElevenLabsのクレジットを多く使いますが再生しますか？'))return;
+  try{
+    const blob=await getVoiceBlob({id:'story_'+st.id,text:st.text,ts:st.ts},lead);
+    if(curAudio)curAudio.pause();
+    curAudio=new Audio(URL.createObjectURL(blob));
+    curAudio.play();
+  }catch(e){showError(e)}
+}
+async function saveStoryVoice(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  const lead=chars.find(c=>c.id===st.leadId);if(!lead)return;
+  try{
+    const blob=await getVoiceBlob({id:'story_'+st.id,text:st.text,ts:st.ts},lead);
+    const file=new File([blob],'物語_'+st.title.replace(/[^ぁ-んァ-ン一-龯a-zA-Z0-9]/g,'')+'.mp3',{type:'audio/mpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]})}
+    else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name;a.click()}
+  }catch(e){if(e.name!=='AbortError')showError(e)}
+}
+async function makeStoryCard(id){
+  const st=stories.find(x=>x.id===id);if(!st)return;
+  if(!(st.scores||[]).length){toast('先に🎯採点してもらってからカードにできます');return}
+  const lead=chars.find(c=>c.id===st.leadId);if(!lead)return;
+  const lastSc=st.scores[st.scores.length-1];
+  const judge=chars.find(c=>c.id===lastSc.judgeId);
+  if(!st.card){
+    closeSheet();toast((judge?judge.name:'査定人')+'がカードを鑑定中…');
+    const prompt=`物語の主役「${lead.name}」のトレーディングカードを査定します。\n物語（抜粋）:\n${st.text.slice(0,5000)}\n\n採点結果: ${JSON.stringify(lastSc.scores)}\nあなた（${judge?judge.name:'査定人'}）目線で、次のJSONだけを出力:\n{"nickname":"主役につける笑える二つ名（7〜12字。際どくてよいが下品すぎない。例のノリ：寸止めの王、生殺し騎士）","summary":"お題の概要を25字以内","roast":"容赦なく面白おかしい講評と二つ名の理由（2〜3文。愛はある）","item":"主役に授ける笑える下ネタ寄りアイテム名（武器・道具なんでも。例のノリ：理性の鞘・我慢の聖剣）"}`;
+    try{
+      const raw=await callProvider(judge.provider,judge.model,judge.os||'',[{role:'user',content:prompt}],600);
+      st.card=JSON.parse(raw.replace(/```json|```/g,'').trim());
+      st.card.judgeId=judge.id;
+      saveStories();
+    }catch(e){showError(e);return}
+  }
+  renderScrollCard(st);
+}
+async function renderScrollCard(st){
+  const lead=chars.find(c=>c.id===st.leadId);
+  const judge=chars.find(c=>c.id===st.card.judgeId);
+  const lastSc=st.scores[st.scores.length-1];
+  toast('巻物を巻いています…');
+  const W=1080;
+  const cv=document.createElement('canvas');
+  const mctx=cv.getContext('2d');
+  mctx.font='400 36px "Hiragino Mincho ProN",serif';
+  const roastLines=wrapLines(mctx,st.card.roast||'',W-300);
+  const params=Object.entries(lastSc.scores||{});
+  const H=980+roastLines.length*58+params.length*52;
+  cv.width=W;cv.height=H;
+  const c2=cv.getContext('2d');
+  // 背景
+  const bg=c2.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#3A3550');bg.addColorStop(1,'#2B2740');
+  c2.fillStyle=bg;c2.fillRect(0,0,W,H);
+  // 羊皮紙
+  const px=70,py=110,pw=W-140,ph=H-220;
+  const pg=c2.createLinearGradient(0,py,0,py+ph);
+  pg.addColorStop(0,'#F6ECD2');pg.addColorStop(0.5,'#F2E4C4');pg.addColorStop(1,'#EBDAB4');
+  c2.fillStyle=pg;
+  c2.shadowColor='rgba(0,0,0,.4)';c2.shadowBlur=34;
+  c2.fillRect(px,py,pw,ph);
+  c2.shadowColor='transparent';
+  c2.strokeStyle='#C9A96A';c2.lineWidth=5;c2.strokeRect(px+16,py+16,pw-32,ph-32);
+  // 上下の巻き棒
+  for(const yy of [py-34,py+ph-14]){
+    c2.fillStyle='#8A6A3B';
+    c2.beginPath();c2.roundRect(px-30,yy,pw+60,48,24);c2.fill();
+    c2.fillStyle='rgba(255,255,255,.16)';
+    c2.beginPath();c2.roundRect(px-30,yy+6,pw+60,12,8);c2.fill();
+  }
+  const ink='#4A3B2A';
+  // 二つ名
+  c2.textAlign='center';c2.fillStyle=ink;
+  c2.font='700 62px "Hiragino Mincho ProN",serif';
+  c2.fillText('『'+(st.card.nickname||'無銘')+'』',W/2,py+128);
+  // 主役アイコン
+  const av=await loadImg(lead&&lead.icon);
+  const ax=W/2,ay=py+250,ar=88;
+  c2.save();c2.beginPath();c2.arc(ax,ay,ar,0,Math.PI*2);c2.clip();
+  if(av){const s0=Math.min(av.width,av.height);c2.drawImage(av,(av.width-s0)/2,(av.height-s0)/2,s0,s0,ax-ar,ay-ar,ar*2,ar*2)}
+  else{c2.fillStyle='#E8D6AE';c2.fillRect(ax-ar,ay-ar,ar*2,ar*2);c2.fillStyle=ink;c2.font='700 80px serif';c2.fillText(lead?lead.name[0]:'?',ax,ay+26)}
+  c2.restore();
+  c2.strokeStyle='#C9A96A';c2.lineWidth=6;c2.beginPath();c2.arc(ax,ay,ar+4,0,Math.PI*2);c2.stroke();
+  c2.font='700 44px "Hiragino Mincho ProN",serif';
+  c2.fillText(lead?lead.name:'？',W/2,ay+ar+66);
+  c2.font='italic 400 30px Georgia,serif';c2.fillStyle='#7A6648';
+  c2.fillText('「'+(st.card.summary||st.title)+'」',W/2,ay+ar+118);
+  // パラメータ
+  let ty=ay+ar+190;
+  c2.textAlign='left';
+  for(const [k,v] of params){
+    c2.fillStyle=ink;c2.font='400 33px "Hiragino Mincho ProN",serif';
+    c2.fillText(k,px+90,ty);
+    c2.fillStyle='#B0722A';c2.font='400 30px serif';
+    c2.textAlign='right';
+    c2.fillText('★'.repeat(Math.min(10,+v||0))+'☆'.repeat(Math.max(0,10-(+v||0)))+'　'+v,W-px-90,ty);
+    c2.textAlign='left';
+    ty+=52;
+  }
+  // 仕切り
+  ty+=8;
+  c2.strokeStyle='#C9A96A';c2.lineWidth=2;
+  c2.beginPath();c2.moveTo(px+90,ty);c2.lineTo(W-px-90,ty);c2.stroke();
+  ty+=64;
+  // 講評
+  c2.fillStyle=ink;c2.font='400 36px "Hiragino Mincho ProN",serif';
+  for(const ln of roastLines){c2.fillText(ln,px+90,ty);ty+=58}
+  ty+=40;
+  // アイテム授与
+  c2.textAlign='center';
+  c2.fillStyle='#8A2C2C';c2.font='700 40px "Hiragino Mincho ProN",serif';
+  c2.fillText('⚔ 授与：'+(st.card.item||'なし'),W/2,ty);
+  ty+=70;
+  // 査定人
+  const jv=await loadImg(judge&&judge.icon);
+  if(jv){
+    c2.save();c2.beginPath();c2.arc(W/2-90,ty-12,26,0,Math.PI*2);c2.clip();
+    const s0=Math.min(jv.width,jv.height);c2.drawImage(jv,(jv.width-s0)/2,(jv.height-s0)/2,s0,s0,W/2-116,ty-38,52,52);
+    c2.restore();
+  }
+  c2.fillStyle='#7A6648';c2.font='italic 400 28px Georgia,serif';
+  c2.textAlign='left';
+  c2.fillText('査定人　'+(judge?judge.name:'？'),W/2-50,ty);
+  c2.textAlign='center';
+  c2.fillStyle='#B25C77';c2.font='italic 400 28px Georgia,serif';
+  c2.fillText('Makemarry Chronicle',W/2,py+ph-56);
+  cv.toBlob(async blob=>{
+    try{
+      const file=new File([blob],'カード_'+(st.card.nickname||st.title)+'.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]})}
+      else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name;a.click()}
+      openSheet(`<div class="sheettitle">🃏 カード</div>
+        <div class="note" style="margin-bottom:10px">『${esc(st.card.nickname)}』／授与：${esc(st.card.item)}</div>
+        <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="renderScrollCard(stories.find(x=>x.id==='${st.id}'))">もう一度保存</button></div>
+        <div class="btnrow" style="margin-bottom:8px"><button class="btn ghost" onclick="(function(){const s2=stories.find(x=>x.id==='${st.id}');s2.card=null;saveStories();closeSheet();toast('カードを削除しました（作り直せます）')})()">🗑 このカードを削除（査定やり直し）</button></div>
+        <div class="btnrow"><button class="btn" onclick="closeSheet()">閉じる</button></div>`);
+    }catch(err){if(err.name!=='AbortError')showError(err)}
+  },'image/png');
 }
 function deleteStory(id){
   if(!confirm('この物語を削除しますか？（獲得点も消えます）'))return;
@@ -2303,7 +2495,7 @@ async function rollJob(cid){
     (st.scores||[]).forEach(sc=>Object.entries(sc.scores||{}).forEach(([k,v])=>{totals[k]=(totals[k]||0)+(+v||0)}));
     return `「${st.title}」評点:${JSON.stringify(totals)} 講評:${(st.scores||[]).map(s=>s.comment).join('/')}`;
   }).join('\n');
-  const prompt=`RPGのジョブ名（称号）をひとつ考えて。対象: ${c.name}（Lv.${charLevel(cid)}）\n最近の戦績:\n${summary||'戦績なし'}\n条件: 日本語で7文字前後、履歴の傾向を突いた、思わず笑ってしまうが本人の名誉も少し守る絶妙な称号。称号だけを出力。`;
+  const prompt=`RPGのジョブ名（称号）を考える大喜利です。対象: ${c.name}（Lv.${charLevel(cid)}）\n最近の戦績と講評:\n${summary||'戦績なし'}\n条件:\n- 日本語5〜10文字\n- 戦績の傾向を的確に突いた、声に出して笑うレベルのやつ\n- 際どさOK・ただし本人の色気と名誉はギリ守る\n- ノリの見本: 寸止めの王 / 生殺し騎士団長 / 理性の番人（陥落済） / 溺愛過積載\n- 見本のコピーは禁止、戦績から発想する\n称号だけを出力。`;
   try{
     const job=await anthropicCall('claude-haiku-4-5-20251001','',[{role:'user',content:prompt}],60);
     document.getElementById('jobText').value=job.trim().replace(/["「」]/g,'');
@@ -2421,7 +2613,7 @@ async function syncConfig(){
         name:c.name,
         model:c.model,
         os:c.os||'',
-        memo:((album[c.id]||[]).slice(-5).map(e=>'・'+e.text).join('\n')+(eventsForPrompt()?'\n【これからの予定】\n'+eventsForPrompt():'')).trim(),
+        memo:((album[c.id]||[]).slice(-5).map(e=>'・'+e.text).join('\n')+(eventsForPrompt(c.id)?'\n【これからの予定】\n'+eventsForPrompt(c.id):'')).trim(),
         auto:!!c.auto,
         hourStart:c.hourStart!=null?c.hourStart:8,
         hourEnd:c.hourEnd!=null?c.hourEnd:23,
