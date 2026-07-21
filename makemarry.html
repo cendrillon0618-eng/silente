@@ -342,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.2</div>
+      <div class="note">Makemarry v5.2.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -2167,11 +2167,13 @@ function editRpgParams(){
     <div class="sheettitle">⚙️ RPG設定</div>
     <div class="field"><label>採点パラメータ（1行1つ）</label><textarea id="rpP" style="min-height:130px">${esc(rpgParams().join('\n'))}</textarea></div>
     <div class="field"><label>レベルアップに必要な点数</label><input type="number" id="rpStep" value="${levelStep()}"></div>
+    <div class="field"><label>カードの銘（巻物の下に入る文字。空なら何も入らない）</label><input type="text" id="rpBrand" value="${esc(settings.cardBrand||'')}" placeholder="例：Luce Silente Chronicle"></div>
     <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="saveRpgParams()">保存</button></div>`);
 }
 function saveRpgParams(){
   settings.rpgParams=document.getElementById('rpP').value.split('\n').map(x=>x.trim()).filter(Boolean);
   settings.levelStep=parseInt(document.getElementById('rpStep').value)||100;
+  settings.cardBrand=document.getElementById('rpBrand').value.trim();
   LS.set('mm_settings',settings);closeSheet();renderStory();toast('保存しました');
 }
 function renderStory(){
@@ -2262,9 +2264,10 @@ function openStoryView(id){
       ${lead&&lead.voiceId&&settings.elevenKey?`<button class="btn ghost" style="padding:9px" onclick="playStoryVoice('${id}')">🔊</button>
       <button class="btn ghost" style="padding:9px" onclick="saveStoryVoice('${id}')">🎧</button>`:''}
     </div>
-    ${(st.scores||[]).map(sc=>{
+    ${(st.scores||[]).map((sc,si)=>{
       const j=chars.find(c=>c.id===sc.judgeId);
-      return `<div class="memcard" style="margin:0 0 10px">
+      return `<div class="memcard" style="margin:0 0 10px;position:relative">
+        <button onclick="event.stopPropagation();deleteScore('${id}',${si})" style="position:absolute;top:10px;right:12px;font-size:14px;color:var(--sub)">🗑</button>
         <div class="md">採点：${esc(j?j.name:'？')}</div>
         ${Object.entries(sc.scores||{}).map(([k,v])=>`<div class="scline"><span>${esc(k)}</span><span class="scbar">${'★'.repeat(Math.min(10,+v||0))}<span style="opacity:.25">${'★'.repeat(Math.max(0,10-(+v||0)))}</span> ${v}</span></div>`).join('')}
         <div class="mt" style="margin-top:8px">${esc(sc.comment||'')}</div>
@@ -2332,7 +2335,7 @@ async function renderScrollCard(st){
   mctx.font='400 36px "Hiragino Mincho ProN",serif';
   const roastLines=wrapLines(mctx,st.card.roast||'',W-300);
   const params=Object.entries(lastSc.scores||{});
-  const H=980+roastLines.length*58+params.length*52;
+  const H=1080+roastLines.length*58+params.length*52;
   cv.width=W;cv.height=H;
   const c2=cv.getContext('2d');
   // 背景
@@ -2398,19 +2401,29 @@ async function renderScrollCard(st){
   c2.fillStyle='#8A2C2C';c2.font='700 40px "Hiragino Mincho ProN",serif';
   c2.fillText('⚔ 授与：'+(st.card.item||'なし'),W/2,ty);
   ty+=70;
-  // 査定人
+  // 査定人（中央寄せで固定位置に）
+  const jy=py+ph-140;
+  c2.fillStyle='#7A6648';c2.font='400 30px "Hiragino Mincho ProN",serif';
+  const jtext='査定人　'+(judge?judge.name:'？');
+  const jtw=c2.measureText(jtext).width;
   const jv=await loadImg(judge&&judge.icon);
+  const groupW=(jv?64:0)+jtw;
+  const gx=(W-groupW)/2;
   if(jv){
-    c2.save();c2.beginPath();c2.arc(W/2-90,ty-12,26,0,Math.PI*2);c2.clip();
-    const s0=Math.min(jv.width,jv.height);c2.drawImage(jv,(jv.width-s0)/2,(jv.height-s0)/2,s0,s0,W/2-116,ty-38,52,52);
+    c2.save();c2.beginPath();c2.arc(gx+26,jy-10,26,0,Math.PI*2);c2.clip();
+    const s0=Math.min(jv.width,jv.height);c2.drawImage(jv,(jv.width-s0)/2,(jv.height-s0)/2,s0,s0,gx,jy-36,52,52);
     c2.restore();
+    c2.strokeStyle='#C9A96A';c2.lineWidth=3;
+    c2.beginPath();c2.arc(gx+26,jy-10,27,0,Math.PI*2);c2.stroke();
   }
-  c2.fillStyle='#7A6648';c2.font='italic 400 28px Georgia,serif';
   c2.textAlign='left';
-  c2.fillText('査定人　'+(judge?judge.name:'？'),W/2-50,ty);
-  c2.textAlign='center';
-  c2.fillStyle='#B25C77';c2.font='italic 400 28px Georgia,serif';
-  c2.fillText('Makemarry Chronicle',W/2,py+ph-56);
+  c2.fillText(jtext,gx+(jv?64:0),jy);
+  // 銘（任意・空なら描かない）
+  if(settings.cardBrand){
+    c2.textAlign='center';
+    c2.fillStyle='#B25C77';c2.font='italic 400 28px Georgia,serif';
+    c2.fillText(settings.cardBrand,W/2,py+ph-62);
+  }
   cv.toBlob(async blob=>{
     try{
       const file=new File([blob],'カード_'+(st.card.nickname||st.title)+'.png',{type:'image/png'});
@@ -2423,6 +2436,12 @@ async function renderScrollCard(st){
         <div class="btnrow"><button class="btn" onclick="closeSheet()">閉じる</button></div>`);
     }catch(err){if(err.name!=='AbortError')showError(err)}
   },'image/png');
+}
+function deleteScore(stId,idx){
+  const st=stories.find(x=>x.id===stId);if(!st)return;
+  if(!confirm('この採点を削除しますか？（獲得点も減ります）'))return;
+  st.scores.splice(idx,1);
+  saveStories();renderStory();openStoryView(stId);
 }
 function deleteStory(id){
   if(!confirm('この物語を削除しますか？（獲得点も消えます）'))return;
