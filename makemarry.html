@@ -144,6 +144,17 @@ img{display:block}
 .lvchip .lvj{font-size:9px;color:var(--sub);max-width:80px;text-align:center;line-height:1.3}
 .scline{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
 .scbar{color:var(--accent-deep);letter-spacing:1px}
+.calwrap{background:var(--surface);border-radius:16px;margin:12px 14px;padding:14px;box-shadow:0 1px 3px rgba(43,39,51,.07)}
+.calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.calhead .cm{font-family:Georgia,serif;font-style:italic;font-size:16px;color:var(--accent-deep)}
+.calhead button{font-size:20px;padding:4px 14px;color:var(--accent-deep)}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.calgrid .dw{font-size:10px;color:var(--sub);padding:4px 0;font-weight:700}
+.calday{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;font-size:13px;gap:1px}
+.calday.dim{opacity:.25}
+.calday.today{background:var(--accent);color:#fff;font-weight:700}
+.calday .dot{font-size:8px;line-height:1;height:9px}
+.calday:active{background:var(--accent-soft)}
 .keyrow{display:flex;gap:6px;align-items:center}
 .keyrow input{flex:1;min-width:0}
 .keybtn{width:38px;height:38px;border-radius:9px;background:var(--bg);border:1px solid var(--line);
@@ -259,7 +270,7 @@ img{display:block}
 
 <!-- ========== 予定 ========== -->
 <div class="screen" id="scr-schedule">
-  <div class="appbar"><span style="font-size:17px;font-weight:700">大事な予定</span><span class="spacer"></span></div>
+  <div class="appbar"><span style="font-size:17px;font-weight:700">大事な予定</span><span class="spacer"></span><button class="iconbtn" onclick="calMode=!calMode;renderSchedule()" id="calToggle">📆</button></div>
   <div class="screenwrap">
     <div class="list" id="scheduleList"></div>
     <button class="fab" onclick="editEvent(null)">＋</button>
@@ -325,7 +336,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.0</div>
+      <div class="note">Makemarry v5.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -1396,7 +1407,7 @@ async function callModel(c){
 }
 async function fetchT(url,opts,ms){
   const ctrl=new AbortController();
-  const t=setTimeout(()=>ctrl.abort(),ms||120000);
+  const t=setTimeout(()=>ctrl.abort(),ms||300000);
   try{
     return await fetch(url,Object.assign({},opts,{signal:ctrl.signal}));
   }catch(e){
@@ -1691,17 +1702,93 @@ events.forEach(e=>{
 });
 const saveEvents=()=>{LS.set('mm_events',events);markSyncDirty()};
 function dayStart(){const d=new Date();d.setHours(0,0,0,0);return d.getTime()}
+function nextOccur(e){
+  if(!e.annual)return e.date;
+  const t0=new Date(dayStart());
+  const [oy,om,od]=e.date.split('-').map(Number);
+  let y=t0.getFullYear();
+  let occ=new Date(y,om-1,od);
+  if(occ.getTime()<t0.getTime())occ=new Date(y+1,om-1,od);
+  return occ.getFullYear()+'-'+String(om).padStart(2,'0')+'-'+String(od).padStart(2,'0');
+}
+function annivYears(e){
+  if(!e.annual)return 0;
+  return parseInt(nextOccur(e).slice(0,4))-parseInt(e.date.slice(0,4));
+}
 function upcomingEvents(days){
   const t0=dayStart(),limit=t0+(days||30)*86400000;
-  return events.filter(e=>{const t=new Date(e.date+'T00:00').getTime();return t>=t0&&t<=limit})
-    .sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  return events.map(e=>({...e,occ:nextOccur(e)}))
+    .filter(e=>{const t=new Date(e.occ+'T00:00').getTime();return t>=t0&&t<=limit})
+    .sort((a,b)=>(a.occ+(a.time||'')).localeCompare(b.occ+(b.time||'')));
 }
-let showPast=false;
+let showPast=false,calMode=false,calYM=null;
+function renderCalendar(){
+  const el=document.getElementById('scheduleList');
+  const now=new Date();
+  if(!calYM)calYM=[now.getFullYear(),now.getMonth()];
+  const [y,m]=calYM;
+  const first=new Date(y,m,1),startDow=first.getDay();
+  const daysIn=new Date(y,m+1,0).getDate();
+  const days=['日','月','火','水','木','金','土'];
+  // その月の予定（記念日は発生日で展開）
+  const evByDay={};
+  events.forEach(e=>{
+    let dstr;
+    if(e.annual){
+      const [oy,om,od]=e.date.split('-').map(Number);
+      if(om-1!==m)return;
+      dstr=y+'-'+String(om).padStart(2,'0')+'-'+String(od).padStart(2,'0');
+    }else{
+      dstr=e.date;
+      const dd=new Date(dstr+'T00:00');
+      if(dd.getFullYear()!==y||dd.getMonth()!==m)return;
+    }
+    const day=parseInt(dstr.slice(8));
+    (evByDay[day]=evByDay[day]||[]).push(e);
+  });
+  let cells='';
+  for(let i=0;i<startDow;i++)cells+='<div class="calday dim"></div>';
+  const todayStr=now.getFullYear()+'-'+now.getMonth()+'-'+now.getDate();
+  for(let d=1;d<=daysIn;d++){
+    const isToday=(y+'-'+m+'-'+d)===todayStr;
+    const evs=evByDay[d]||[];
+    const dot=evs.length?(evs.some(e=>e.annual)?'🎀':'●'):'';
+    cells+=`<div class="calday ${isToday?'today':''}" onclick="calDayTap(${y},${m},${d})"><span>${d}</span><span class="dot" style="color:var(--accent-deep)">${dot}</span></div>`;
+  }
+  el.innerHTML=`<div class="calwrap">
+    <div class="calhead">
+      <button onclick="calYM=[${m===0?y-1:y},${m===0?11:m-1}];renderCalendar()">‹</button>
+      <span class="cm">${y}年${m+1}月</span>
+      <button onclick="calYM=[${m===11?y+1:y},${m===11?0:m+1}];renderCalendar()">›</button>
+    </div>
+    <div class="calgrid">${days.map(d=>`<div class="dw">${d}</div>`).join('')}${cells}</div>
+  </div>
+  <div class="note" style="margin:0 20px">●＝予定 🎀＝記念日。日付をタップすると詳細と追加。</div>`;
+}
+function calDayTap(y,m,d){
+  const dstr=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  const todays=events.filter(e=>{
+    if(e.annual){const [oy,om,od]=e.date.split('-').map(Number);return om-1===m&&od===d}
+    return e.date===dstr;
+  });
+  openSheet(`
+    <div class="sheettitle">${m+1}月${d}日</div>
+    ${todays.length?todays.map(e=>`<div class="sheetitem" onclick="closeSheet();editEvent('${e.id}')">${e.annual?'🎀':'📌'} ${esc(e.title)}${e.annual&&annivYears(e)>0?'（'+annivYears(e)+'周年）':''}${e.time?' '+esc(e.time):''}</div>`).join(''):'<div class="note" style="padding:10px 4px">予定はありません。</div>'}
+    <div class="btnrow" style="margin-top:10px"><button class="btn ghost" onclick="closeSheet()">閉じる</button><button class="btn" onclick="closeSheet();editEventPrefill('${dstr}')">＋ この日に追加</button></div>`);
+}
+function editEventPrefill(dstr){
+  editEvent(null);
+  setTimeout(()=>{const el=document.getElementById('evDate');if(el)el.value=dstr},50);
+}
 function renderSchedule(){
+  const tg=document.getElementById('calToggle');
+  if(tg)tg.textContent=calMode?'📋':'📆';
+  if(calMode){renderCalendar();return}
   const el=document.getElementById('scheduleList');
   const t0=dayStart();
-  const fut=events.filter(e=>new Date(e.date+'T00:00').getTime()>=t0)
-    .sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const fut=events.map(e=>({...e,occ:nextOccur(e)}))
+    .filter(e=>new Date(e.occ+'T00:00').getTime()>=t0)
+    .sort((a,b)=>(a.occ+(a.time||'')).localeCompare(b.occ+(b.time||'')));
   const past=events.filter(e=>new Date(e.date+'T00:00').getTime()<t0)
     .sort((a,b)=>(b.date+(b.time||'')).localeCompare(a.date+(a.time||'')));
   if(!events.length){
@@ -1710,7 +1797,7 @@ function renderSchedule(){
   let html='',curMonth='';
   const days=['日','月','火','水','木','金','土'];
   for(const e of fut){
-    const d=new Date(e.date+'T00:00');
+    const d=new Date(e.occ+'T00:00');
     const mkey=d.getFullYear()+'年'+(d.getMonth()+1)+'月';
     if(mkey!==curMonth){curMonth=mkey;html+=`<div class="monthhead">${mkey}</div>`}
     const diff=Math.round((d.getTime()-t0)/86400000);
@@ -1718,7 +1805,7 @@ function renderSchedule(){
     html+=`<div class="evcard" onclick="editEvent('${e.id}')">
       <div class="evdate ${diff===0?'today':''}"><div class="dd">${d.getDate()}</div><div class="dw">${days[d.getDay()]}</div></div>
       <div class="evbody">
-        <div class="evtitle">${esc(e.title)}</div>
+        <div class="evtitle">${e.annual?'🎀 ':''}${esc(e.title)}${e.annual&&annivYears(e)>0?`<span style="font-size:12px;color:var(--accent-deep)">（${annivYears(e)}周年）</span>`:''}</div>
         <div class="evmeta">${e.time?'🕐 '+esc(e.time):''}${soon?`<span class="evsoon">${soon}</span>`:''}</div>
         ${(e.comments||[]).map(cm=>{
           const c=chars.find(x=>x.name===cm.by);
@@ -1756,6 +1843,7 @@ function editEvent(id){
       <div style="flex:1"><label>時間（任意）</label><input type="time" id="evTime" value="${e&&e.time?e.time:''}"></div>
     </div>
     <div class="field"><label>予定</label><input type="text" id="evTitle" value="${e?esc(e.title):''}" placeholder="例：指輪を見に行く"></div>
+    <div class="checkrow"><input type="checkbox" id="evAnnual" ${e&&e.annual?'checked':''}><label for="evAnnual" style="font-size:14px">🎀 記念日（毎年繰り返す。キャラは忘れられない）</label></div>
     <div class="btnrow" style="margin-bottom:10px">
       ${e?`<button class="btn ghost" onclick="eventComment('${e.id}')">💬 キャラから一言もらう</button>`:''}
     </div>
@@ -1770,8 +1858,9 @@ function saveEvent(id){
   const time=document.getElementById('evTime').value;
   const title=document.getElementById('evTitle').value.trim();
   if(!date||!title){toast('日付と予定を入れてください');return}
-  if(id){const e=events.find(x=>x.id===id);Object.assign(e,{date,time,title})}
-  else{events.push({id:uid(),date,time,title,comments:[]})}
+  const annual=document.getElementById('evAnnual').checked;
+  if(id){const e=events.find(x=>x.id===id);Object.assign(e,{date,time,title,annual})}
+  else{events.push({id:uid(),date,time,title,annual,comments:[]})}
   saveEvents();closeSheet();renderSchedule();toast('保存しました');
 }
 function deleteEvent(id){
@@ -1800,7 +1889,7 @@ function eventComment(id){
 function eventsForPrompt(){
   const list=upcomingEvents(14);
   if(!list.length)return '';
-  return list.map(e=>`・${e.date}${e.time?' '+e.time:''}：${e.title}`).join('\n');
+  return list.map(e=>`・${e.occ}${e.time?' '+e.time:''}：${e.title}${e.annual?`（🎀記念日${annivYears(e)>0?'・'+annivYears(e)+'周年':''}。絶対に忘れないこと）`:''}`).join('\n');
 }
 
 /* ================= 思い出アルバム ================= */
