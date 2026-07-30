@@ -333,6 +333,14 @@ export default {
       if (app === "makemarry") await env.MM_KV.put("sub", JSON.stringify(body.subscription));
       return json({ ok: true, app });
     }
+    if (path === "/sil-shared" && req.method === "POST") {
+      const body = await req.json();
+      await env.MM_KV.put("sil_shared", JSON.stringify(body.presets || []));
+      return json({ ok: true, count: (body.presets || []).length });
+    }
+    if (path === "/sil-shared") {
+      return json(JSON.parse((await env.MM_KV.get("sil_shared")) || "[]"));
+    }
     if (path === "/silente-sched" && req.method === "POST") {
       const body = await req.json();
       await env.MM_KV.put("sil_sched", JSON.stringify(body.items || []));
