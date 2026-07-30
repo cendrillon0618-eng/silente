@@ -626,6 +626,11 @@ function msgEl(m,idx){
       setTimeout(()=>sv.textContent="📁保存",2000);
     };
     tools.append(sv);
+    if(m.content){
+      const mk=document.createElement("button"); mk.textContent="🖍";
+      mk.onclick=()=>openMarkerS(idx);
+      tools.append(mk);
+    }
     if(idx>=0){
       const ed=document.createElement("button"); ed.textContent="✏️";
       ed.onclick=()=>editMessage(idx);
@@ -727,6 +732,20 @@ function buildSystem(c){
 function apiMessages(c){
   const msgs=[];
   const startIdx=c.compactIdx||0;
+  // 文脈の引き継ぎ：同じ部屋の直前の会話の終わりを生ログのまま前置（温度の連続性）
+  const carryN=S.carryN!=null?S.carryN:8;
+  if(carryN>0 && (c.messages.length<6) && startIdx===0){
+    const prev=S.convos.filter(x=>x.presetId===c.presetId&&x.id!==c.id&&x.messages.length&&(x.updated||0)<(c.created||Infinity))
+      .sort((a,b)=>(b.updated||0)-(a.updated||0))[0];
+    if(prev){
+      const tail=prev.messages.slice(-carryN).filter(m=>m.content);
+      if(tail.length){
+        msgs.push({role:"user",content:"【直前の会話（同じ部屋の続き。この温度と呼吸のまま話す）】"});
+        msgs.push({role:"assistant",content:"（前の会話の流れを引き継ぐ。）"});
+        for(const m of tail)msgs.push({role:m.role,content:m.content});
+      }
+    }
+  }
   if(c.summary && startIdx>0){
     msgs.push({role:"user",content:"【これまでの会話の要約（自動圧縮）】\n"+c.summary});
     msgs.push({role:"assistant",content:"（要約を把握した。続きから再開する。）"});
@@ -1266,7 +1285,108 @@ async function silTestPush(){
   }catch(e){ alert("エラー: "+e.message); }
 }
 
+/* ============ マーカーカード ============ */
+let mkSegsS=[],mkSelS=[],mkColorS=1,mkIdxS=-1;
+const MK_COLORS_S={1:"#FFE58A",2:"#FFC9DB",3:"#BFE3FF"};
+function openMarkerS(idx){
+  const c=cur();if(!c)return;
+  const m=c.messages[idx];if(!m||!m.content)return;
+  mkIdxS=idx;
+  mkSegsS=m.content.split(/(?<=[。！？!?\n])/).filter(x=>x.length);
+  mkSelS=mkSegsS.map(()=>0);mkColorS=1;
+  renderMarkerS();
+}
+function renderMarkerS(){
+  openSheet(`
+    <h3>🖍 マーカーを引く</h3>
+    <div class="hint" style="margin-bottom:8px">色を選んで、文をタップ。もう一度タップで消える。</div>
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      ${[1,2,3].map(cn=>`<button data-mkc="${cn}" style="flex:1;height:36px;border-radius:10px;background:${MK_COLORS_S[cn]};border:${mkColorS===cn?"3px solid var(--accent)":"1px solid var(--line)"}"></button>`).join("")}
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:14px;line-height:2.1;max-height:40dvh;overflow-y:auto">
+      ${mkSegsS.map((sg,i)=>`<span data-mks="${i}" style="border-radius:5px;padding:1px 2px;${mkSelS[i]?"background:"+MK_COLORS_S[mkSelS[i]]+";color:#222":""}">${esc(sg)}</span>`).join("")}
+    </div>
+    <div class="rowBtns" style="margin-top:12px"><button id="mkGo">🖼 カードにする</button><button id="mkNo">やめる</button></div>`);
+  sheetEl.querySelectorAll("[data-mkc]").forEach(b=>b.onclick=()=>{mkColorS=+b.dataset.mkc;renderMarkerS()});
+  sheetEl.querySelectorAll("[data-mks]").forEach(sp=>sp.onclick=()=>{const i=+sp.dataset.mks;mkSelS[i]=mkSelS[i]===mkColorS?0:mkColorS;renderMarkerS()});
+  $("#mkGo").onclick=makeMarkerCardS;
+  $("#mkNo").onclick=closeSheet;
+}
+async function makeMarkerCardS(){
+  const c=cur();const m=c.messages[mkIdxS];if(!m)return;
+  const p=presetOf(c);
+  const who=m.role==="user"?"かのん":p.name.replace(/^[^ぁ-んァ-ン一-龯a-zA-Z0-9]+/,"");
+  closeSheet();
+  const chsAll=[];
+  mkSegsS.forEach((sg,i)=>{for(const ch of sg)chsAll.push({ch,cl:mkSelS[i]})});
+  const W=1080;
+  const cvp=document.createElement("canvas");
+  const c2p=cvp.getContext("2d");
+  const fontSpec='400 40px "Hiragino Mincho ProN",serif';
+  c2p.font=fontSpec;
+  const maxW=W-240;
+  const lines=[];let line=[];let lw=0;
+  for(const it of chsAll){
+    if(it.ch==="\n"){lines.push(line);line=[];lw=0;continue}
+    const w0=c2p.measureText(it.ch).width;
+    if(lw+w0>maxW&&line.length){lines.push(line);line=[];lw=0}
+    line.push(it);lw+=w0;
+  }
+  if(line.length)lines.push(line);
+  const lineH=74;
+  const H=Math.max(700,380+lines.length*lineH+150);
+  const cv=document.createElement("canvas");cv.width=W;cv.height=H;
+  const c2=cv.getContext("2d");
+  const bg=c2.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,"#1B1E33");bg.addColorStop(1,"#0E1220");
+  c2.fillStyle=bg;c2.fillRect(0,0,W,H);
+  c2.fillStyle="rgba(255,255,255,0.05)";
+  c2.beginPath();c2.roundRect(60,70,W-120,H-140,40);c2.fill();
+  c2.strokeStyle="rgba(201,169,106,.5)";c2.lineWidth=2;
+  c2.beginPath();c2.roundRect(60,70,W-120,H-140,40);c2.stroke();
+  c2.textAlign="left";
+  c2.fillStyle="#C9A96A";
+  c2.font='italic 700 40px Georgia,serif';
+  c2.fillText(who,120,180);
+  c2.fillStyle="rgba(242,239,234,.55)";c2.font='italic 400 26px Georgia,serif';
+  c2.fillText(new Date(m.ts||Date.now()).toLocaleString("ja-JP",{year:"numeric",month:"long",day:"numeric"}),120,224);
+  let ty=310;
+  c2.font=fontSpec;
+  for(const ln of lines){
+    let x=120;
+    for(const it of ln){
+      const w0=c2.measureText(it.ch).width;
+      if(it.cl){c2.fillStyle=MK_COLORS_S[it.cl];c2.globalAlpha=.85;c2.fillRect(x-1,ty-44,w0+2,58);c2.globalAlpha=1}
+      x+=w0;
+    }
+    x=120;
+    for(const it of ln){
+      c2.fillStyle=it.cl?"#222":"#F2EFEA";
+      c2.fillText(it.ch,x,ty);
+      x+=c2.measureText(it.ch).width;
+    }
+    ty+=lineH;
+  }
+  c2.textAlign="center";
+  c2.fillStyle="rgba(178,92,119,.8)";c2.font='italic 400 26px Georgia,serif';
+  c2.fillText("Silente",W/2,H-100);
+  cv.toBlob(async blob=>{
+    try{
+      const file=new File([blob],"ログカード_"+who+".png",{type:"image/png"});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]})}
+      else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=file.name;a.click()}
+    }catch(err){if(err.name!=="AbortError")alert("保存エラー: "+err.message)}
+  },"image/png");
+}
+
 /* ============ Makemarry連携 ============ */
+async function pushSilShared(){
+  if(!S.mmUrl||!S.mmToken)return;
+  try{
+    const presets=(S.memory||[]).filter(sec=>(sec.text||"").trim()).map(sec=>({name:sec.title,memory:sec.text.trim()}));
+    await fetch(S.mmUrl.replace(/\/+$/,"")+"/sil-shared",{method:"POST",headers:{"content-type":"application/json","x-mm-token":S.mmToken},body:JSON.stringify({presets})});
+  }catch(e){}
+}
 async function fetchMMShared(show){
   try{
     const res=await fetch(S.mmUrl.replace(/\/+$/,"")+"/shared",{headers:{"x-mm-token":S.mmToken}});
@@ -1430,6 +1550,8 @@ function openSettings(){
     <div class="field"><label>読み方辞書（読み上げの誤読対策）</label>
       <textarea id="fRDict" style="min-height:70px" placeholder="奏音＝かのん&#10;灯＝ともり&#10;遙＝はるか">${esc(S.readDictText||"")}</textarea>
       <div class="hint">1行「単語＝よみ」。読み上げ時は漢字を自動でふりがな化（Haiku清書）してから声にするよ。</div></div>
+    <div class="field"><label>新しい会話への文脈引き継ぎ（前の会話の終わりを何通引き継ぐか。0でオフ）</label>
+      <input type="number" id="fCarry" value="${S.carryN!=null?S.carryN:8}" min="0" max="30"></div>
     <div class="field"><label>Makemarry連携</label>
       <div class="optRow"><span>共有記憶を読み込む</span><div class="toggle ${S.mmOn?"on":""}" id="fMMOn"></div></div>
       <input type="text" id="fMMUrl" value="${escAttr(S.mmUrl||"")}" placeholder="https://xxx.workers.dev" style="margin-top:8px">
@@ -1491,6 +1613,7 @@ function openSettings(){
     S.mmOn=$("#fMMOn").classList.contains("on");
     S.mmUrl=$("#fMMUrl").value.trim().replace(/\/+$/,"");
     S.mmToken=$("#fMMToken").value.trim();
+    S.carryN=parseInt($("#fCarry").value)||0;
     S.geminiImageModel=$("#fGModel").value.trim()||"gemini-2.5-flash-image";
     S.openaiImageModel=$("#fOImg").value.trim()||"gpt-image-2";
     S.ttsVoice=$("#fTtsV").value;
@@ -1594,6 +1717,7 @@ function commitMemoryFields(){
     const sec=(S.memory||[]).find(x=>x.id===t.dataset.mtext);
     if(sec) sec.text=t.value;
   });
+  pushSilShared();
 }
 async function extractMemory(){
   const c=cur();
@@ -2990,8 +3114,8 @@ else{ setTimeout(checkMorning, 400); }
 setTimeout(checkSchedules, 1500);
 setInterval(checkSchedules, 30000);
 
-/* Makemarry共有記憶の自動取得（起動時） */
-try{ if(S.mmOn && S.mmUrl && S.mmToken) fetchMMShared(false); }catch(e){}
+/* Makemarry共有記憶の自動取得（起動時）＋Silente記憶の送り出し */
+try{ if(S.mmOn && S.mmUrl && S.mmToken){ fetchMMShared(false); pushSilShared(); } }catch(e){}
 /* おかえり画面 */
 try{ showWelcome(); }catch(e){}
 </script>
