@@ -342,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.4</div>
+      <div class="note">Makemarry v5.5</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -920,6 +920,7 @@ function msgActions(msgId){
     <div class="sheetitem" onclick="editMsg('${msgId}')"><span class="si">✏️</span>編集する</div>
     ${(()=>{const mc=m.role==='char'?chars.find(x=>x.id===m.charId):null;if(!(mc&&mc.voiceId&&settings.elevenKey))return '';return `<div class="sheetitem" onclick="speakMsg('${msgId}')"><span class="si">🔊</span>声で聴く</div><div class="sheetitem" onclick="saveVoiceMp3('${msgId}')"><span class="si">💾</span>音声をmp3で保存</div>`})()}
     ${isLastChar?`<div class="sheetitem" onclick="regenMsg('${msgId}')"><span class="si">🔄</span>もう一度生成する</div>`:''}
+    <div class="sheetitem" onclick="openMarker('${msgId}')"><span class="si">🖍</span>マーカーを引いてカードにする</div>
     <div class="sheetitem" onclick="copyMsg('${msgId}')"><span class="si">📋</span>コピー</div>
     <div class="sheetitem" onclick="deleteMsg('${msgId}')" style="color:#C0392B"><span class="si">🗑️</span>このメッセージ以降を削除</div>`);
 }
@@ -1044,6 +1045,113 @@ async function saveVoiceMp3(id){
     }
   }catch(e){if(e.name!=='AbortError')showError(e)}
 }
+/* ---- マーカーカード ---- */
+let mkSegs=[],mkSel=[],mkColor=1,mkMsgId=null;
+const MK_COLORS={1:'#FFE58A',2:'#FFC9DB',3:'#BFE3FF'};
+function openMarker(id){
+  closeSheet();
+  const m=getMsgs(curTalk.id).find(x=>x.id===id);if(!m||!m.text)return;
+  mkMsgId=id;
+  mkSegs=m.text.split(/(?<=[。！？!?\n])/).map(x=>x).filter(x=>x.length);
+  mkSel=mkSegs.map(()=>0);mkColor=1;
+  renderMarkerSheet();
+}
+function renderMarkerSheet(){
+  openSheet(`
+    <div class="sheettitle">🖍 マーカーを引く</div>
+    <div class="note" style="margin-bottom:8px">色を選んで、文をタップ。もう一度タップで消えます。</div>
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      ${[1,2,3].map(cn=>`<button onclick="mkColor=${cn};renderMarkerSheet()" style="flex:1;height:36px;border-radius:10px;background:${MK_COLORS[cn]};border:${mkColor===cn?'3px solid var(--accent-deep)':'1px solid var(--line)'}"></button>`).join('')}
+    </div>
+    <div style="background:var(--surface);border-radius:14px;padding:14px;font-size:14.5px;line-height:2.1;max-height:40dvh;overflow-y:auto">
+      ${mkSegs.map((sg,i)=>`<span onclick="mkToggle(${i})" style="border-radius:5px;padding:1px 2px;${mkSel[i]?'background:'+MK_COLORS[mkSel[i]]:''}">${esc(sg)}</span>`).join('')}
+    </div>
+    <div class="btnrow" style="margin-top:12px"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="makeMarkerCard()">🖼 カードにする</button></div>`);
+}
+function mkToggle(i){
+  mkSel[i]=mkSel[i]===mkColor?0:mkColor;
+  renderMarkerSheet();
+}
+async function makeMarkerCard(){
+  const m=getMsgs(curTalk.id).find(x=>x.id===mkMsgId);if(!m)return;
+  const c=m.role==='char'?chars.find(x=>x.id===m.charId):null;
+  const who=m.role==='user'?userName():(c?c.name:'？');
+  closeSheet();toast('カードを作っています…');
+  // 文字ごとの色マップを作成
+  const chsAll=[];
+  mkSegs.forEach((sg,i)=>{for(const ch of sg)chsAll.push({ch,cl:mkSel[i]})});
+  const W=1080,PAD=90;
+  const cv=document.createElement('canvas');
+  const c2p=cv.getContext('2d');
+  const fontSpec='400 40px "Hiragino Mincho ProN",serif';
+  c2p.font=fontSpec;
+  const maxW=W-120-PAD*1.2;
+  // 手動折り返し（色情報つき）
+  const lines=[];let line=[];let lw=0;
+  for(const it of chsAll){
+    if(it.ch==='\n'){lines.push(line);line=[];lw=0;continue}
+    const w0=c2p.measureText(it.ch).width;
+    if(lw+w0>maxW&&line.length){lines.push(line);line=[];lw=0}
+    line.push(it);lw+=w0;
+  }
+  if(line.length)lines.push(line);
+  const lineH=74;
+  const H=Math.max(760,430+lines.length*lineH+170);
+  cv.width=W;cv.height=H;
+  const c2=cv.getContext('2d');
+  const bg=c2.createLinearGradient(0,0,W*0.3,H);
+  bg.addColorStop(0,'#F4EDF0');bg.addColorStop(1,'#E9E4F1');
+  c2.fillStyle=bg;c2.fillRect(0,0,W,H);
+  c2.fillStyle='rgba(255,255,255,0.96)';
+  c2.shadowColor='rgba(43,39,51,0.12)';c2.shadowBlur=40;c2.shadowOffsetY=10;
+  c2.beginPath();c2.roundRect(60,70,W-120,H-140,44);c2.fill();
+  c2.shadowColor='transparent';
+  // ヘッダー（アイコン・名前・日付）
+  const av=c?await new Promise(res=>{if(!c.icon){res(null);return}const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=c.icon}):null;
+  const ax=140,ay=170,ar=52;
+  c2.save();c2.beginPath();c2.arc(ax,ay,ar,0,Math.PI*2);c2.clip();
+  if(av){const s0=Math.min(av.width,av.height);c2.drawImage(av,(av.width-s0)/2,(av.height-s0)/2,s0,s0,ax-ar,ay-ar,ar*2,ar*2)}
+  else{c2.fillStyle='#F5E4EA';c2.fillRect(ax-ar,ay-ar,ar*2,ar*2);c2.fillStyle='#9A4560';c2.font='700 48px sans-serif';c2.textAlign='center';c2.textBaseline='middle';c2.fillText(who[0],ax,ay+3);c2.textBaseline='alphabetic'}
+  c2.restore();
+  c2.strokeStyle='#F5E4EA';c2.lineWidth=5;
+  c2.beginPath();c2.arc(ax,ay,ar+3,0,Math.PI*2);c2.stroke();
+  c2.textAlign='left';c2.fillStyle='#2B2733';
+  c2.font='700 42px -apple-system,"Hiragino Sans",sans-serif';
+  c2.fillText(who,ax+ar+28,ay-2);
+  c2.fillStyle='#9A4560';c2.font='italic 400 28px Georgia,serif';
+  c2.fillText(new Date(m.ts).toLocaleString('ja-JP',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}),ax+ar+28,ay+40);
+  // 本文（マーカー付き）
+  let ty=310;
+  const tx=120;
+  c2.font=fontSpec;
+  for(const ln of lines){
+    // ハイライト帯
+    let x=tx;
+    for(const it of ln){
+      const w0=c2.measureText(it.ch).width;
+      if(it.cl){c2.fillStyle=MK_COLORS[it.cl];c2.fillRect(x-1,ty-44,w0+2,58)}
+      x+=w0;
+    }
+    // 文字
+    x=tx;c2.fillStyle='#2B2733';
+    for(const it of ln){
+      c2.fillText(it.ch,x,ty);
+      x+=c2.measureText(it.ch).width;
+    }
+    ty+=lineH;
+  }
+  if(settings.cardBrand){
+    c2.textAlign='center';c2.fillStyle='#B25C77';c2.font='italic 400 28px Georgia,serif';
+    c2.fillText(settings.cardBrand,W/2,H-105);
+  }
+  cv.toBlob(async blob=>{
+    try{
+      const file=new File([blob],'ログカード_'+who+'_'+new Date(m.ts).toISOString().slice(0,10)+'.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]})}
+      else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name;a.click()}
+    }catch(err){if(err.name!=='AbortError')showError(err)}
+  },'image/png');
+}
 function copyMsg(id){
   const m=getMsgs(curTalk.id).find(x=>x.id===id);
   navigator.clipboard.writeText(m.text).then(()=>toast('コピーしました'));
@@ -1100,6 +1208,28 @@ function regenMsg(id){
   generateFor(chars.find(c=>c.id===charId));
 }
 
+function openInherit(){
+  const others=talks.filter(t=>t.id!==curTalk.id);
+  openSheet(`
+    <div class="sheettitle">🔗 文脈の引き継ぎ</div>
+    <div class="note" style="margin-bottom:10px">選んだ部屋の「終わりの数通」を、この部屋の会話の前に生ログのまま差し込みます（画面には出ません）。新しい部屋でも声の温度と密度が最初から繋がります。</div>
+    <div class="field"><label>引き継ぎ元の部屋</label>
+      <select id="ihFrom">
+        <option value="">なし（引き継がない）</option>
+        ${others.map(t=>{
+          const nm=t.name||t.charIds.map(id=>(chars.find(c=>c.id===id)||{name:'？'}).name).join('・');
+          return `<option value="${t.id}" ${curTalk.inheritFrom===t.id?'selected':''}>${esc(nm)}（${getMsgs(t.id).length}通）</option>`;
+        }).join('')}
+      </select></div>
+    <div class="field"><label>引き継ぐ通数（多いほど濃い・コスト増）</label><input type="number" id="ihN" value="${curTalk.inheritN||10}" min="2" max="40"></div>
+    <div class="btnrow"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="saveInherit()">保存</button></div>`);
+}
+function saveInherit(){
+  curTalk.inheritFrom=document.getElementById('ihFrom').value||null;
+  curTalk.inheritN=parseInt(document.getElementById('ihN').value)||10;
+  saveTalks();closeSheet();
+  toast(curTalk.inheritFrom?'引き継ぎON。次の返信から前の部屋の温度が繋がります':'引き継ぎを解除しました');
+}
 async function shareTxt(name,text){
   const file=new File([new Blob(["\ufeff"+text],{type:'text/plain'})],name,{type:'text/plain'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){
@@ -1228,6 +1358,7 @@ function writeAlbumFromChat(){
 function openChatMenu(){
   openSheet(`
     <div class="sheettitle">${esc(talkDisplay(curTalk).name)}</div>
+    <div class="sheetitem" onclick="openInherit()"><span class="si">🔗</span>文脈の引き継ぎ：${curTalk.inheritFrom?'ON':'OFF'}</div>
     <div class="sheetitem" onclick="exportTalkTxt()"><span class="si">📁</span>この部屋の会話をファイルに残す</div>
     <div class="sheetitem" onclick="toggleNight()"><span class="si">🌙</span>夜モード：${curTalk.night?'ON（タップでOFF）':'OFF（タップでON）'}</div>
     <div class="sheetitem" onclick="toggleTalkVoice()"><span class="si">🔊</span>このトークの声：${curTalk.voiceMute?'OFF（タップでON）':'ON（タップでOFF）'}</div>
@@ -1444,6 +1575,10 @@ function buildSystem(c){
   let sys=c.os||'';
   if(settings.globalOS)sys=settings.globalOS+'\n\n'+sys;
   if(c.storyOS)sys+=`\n\n【物語で確かめた自分の特性（RPGモードの記録）】\n${c.storyOS}`;
+  if(settings.silShared&&settings.silShared.length){
+    const ent=settings.silShared.find(p=>p.name&&p.name.includes(c.name)&&p.memory);
+    if(ent)sys+=`\n\n【Silente（執筆・対話アプリ）でのあなたの記憶】\n${ent.memory}`;
+  }
   if(curTalk.memory)sys+=`\n\n【記憶（これまでの経緯・自分でまとめたもの）】\n${curTalk.memory}`;
   const mem=(album[c.id]||[]).slice(-10).map(e=>'・'+e.text).join('\n');
   if(mem)sys+=`\n\n【思い出（自分で残した大切な記録）】\n${mem}`;
@@ -1468,7 +1603,14 @@ function buildSystem(c){
   return sys;
 }
 function buildTranscript(c){
-  const all=getMsgs(curTalk.id).slice(-(settings.histLimit||40));
+  let all=getMsgs(curTalk.id).slice(-(settings.histLimit||40));
+  if(curTalk.inheritFrom){
+    const src=talks.find(t=>t.id===curTalk.inheritFrom);
+    if(src){
+      const prev=getMsgs(src.id).slice(-(curTalk.inheritN||10));
+      if(prev.length)all=prev.concat(all);
+    }
+  }
   // 画像は直近8メッセージ分だけ実データを送り、それ以前は（画像）表記に
   const imgCutoff=Math.max(0,all.length-8);
   const blocks=[];
@@ -2907,6 +3049,10 @@ async function syncConfig(){
       })
     };
     const r=await serverFetch('/config',{method:'POST',body:JSON.stringify(cfg)});
+    try{
+      const sil=await serverFetch('/sil-shared');
+      settings.silShared=sil;LS.set('mm_settings',settings);
+    }catch(e){}
     settings.syncDirty=false;LS.set('mm_settings',settings);updateSyncDot();
     toast('同期しました（'+r.chars+'キャラ・共有データ込み）');
   }catch(e){showError(e)}
