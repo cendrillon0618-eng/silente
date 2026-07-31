@@ -342,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.6</div>
+      <div class="note">Makemarry v5.6.1</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -1217,7 +1217,7 @@ function openInherit(){
       <select id="ihFrom">
         <option value="">なし（引き継がない）</option>
         ${others.map(t=>{
-          const nm=t.name||t.charIds.map(id=>(chars.find(c=>c.id===id)||{name:'？'}).name).join('・');
+          const nm=talkDisplay(t).name;
           return `<option value="${t.id}" ${curTalk.inheritFrom===t.id?'selected':''}>${esc(nm)}（${getMsgs(t.id).length}通）</option>`;
         }).join('')}
       </select></div>
@@ -1242,7 +1242,8 @@ function exportTalkTxt(){
   closeSheet();
   const msgs=getMsgs(curTalk.id);
   const members=curTalk.charIds.map(id=>(chars.find(c=>c.id===id)||{name:'？'}).name).join('、');
-  let out=`【Makemarry 会話記録】\n部屋：${curTalk.name||members}\nメンバー：${userName()}、${members}\n書き出し日：${new Date().toLocaleString('ja-JP')}\n通数：${msgs.length}\n`;
+  const roomNm=talkDisplay(curTalk).name;
+  let out=`【Makemarry 会話記録】\n部屋：${roomNm}\nメンバー：${userName()}、${members}\n書き出し日：${new Date().toLocaleString('ja-JP')}\n通数：${msgs.length}\n`;
   out+=`\n※このファイルはAIに読ませて文脈を思い出させる用途にも使えます。\n`;
   if(curTalk.memory)out+=`\n━━━ 記憶ノート ━━━\n${curTalk.memory}\n`;
   out+=`\n━━━ 会話ログ ━━━\n`;
@@ -1256,7 +1257,7 @@ function exportTalkTxt(){
     if(m.think)out+=`${tm} ${nm}（心の中）：${m.think}\n`;
     out+=`${tm} ${nm}：${m.text||'（画像）'}\n`;
   }
-  shareTxt('会話_'+(curTalk.name||members)+'_'+new Date().toISOString().slice(0,10)+'.txt',out);
+  shareTxt('会話_'+roomNm+'_'+new Date().toISOString().slice(0,10)+'.txt',out);
 }
 function exportAlbumTxt(){
   const c=chars.find(x=>x.id===albumSel);if(!c){toast('キャラを選んでください');return}
