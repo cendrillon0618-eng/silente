@@ -1061,16 +1061,24 @@ function renderMarkerSheet(){
     <div class="sheettitle">🖍 マーカーを引く</div>
     <div class="note" style="margin-bottom:8px">色を選んで、文をタップ。もう一度タップで消えます。</div>
     <div style="display:flex;gap:10px;margin-bottom:10px">
-      ${[1,2,3].map(cn=>`<button onclick="mkColor=${cn};renderMarkerSheet()" style="flex:1;height:36px;border-radius:10px;background:${MK_COLORS[cn]};border:${mkColor===cn?'3px solid var(--accent-deep)':'1px solid var(--line)'}"></button>`).join('')}
+      ${[1,2,3].map(cn=>`<button id="mkClrBtn${cn}" onclick="mkSetColor(${cn})" style="flex:1;height:36px;border-radius:10px;background:${MK_COLORS[cn]};border:${mkColor===cn?'3px solid var(--accent-deep)':'1px solid var(--line)'}"></button>`).join('')}
     </div>
     <div style="background:var(--surface);border-radius:14px;padding:14px;font-size:14.5px;line-height:2.1;max-height:40dvh;overflow-y:auto">
-      ${mkSegs.map((sg,i)=>`<span onclick="mkToggle(${i})" style="border-radius:5px;padding:1px 2px;${mkSel[i]?'background:'+MK_COLORS[mkSel[i]]:''}">${esc(sg)}</span>`).join('')}
+      ${mkSegs.map((sg,i)=>`<span id="mkSg${i}" onclick="mkToggle(${i})" style="border-radius:5px;padding:1px 2px;${mkSel[i]?'background:'+MK_COLORS[mkSel[i]]:''}">${esc(sg)}</span>`).join('')}
     </div>
     <div class="btnrow" style="margin-top:12px"><button class="btn ghost" onclick="closeSheet()">やめる</button><button class="btn" onclick="makeMarkerCard()">🖼 カードにする</button></div>`);
 }
+function mkSetColor(cn){
+  mkColor=cn;
+  [1,2,3].forEach(n=>{
+    const b=document.getElementById('mkClrBtn'+n);
+    if(b)b.style.border=n===cn?'3px solid var(--accent-deep)':'1px solid var(--line)';
+  });
+}
 function mkToggle(i){
   mkSel[i]=mkSel[i]===mkColor?0:mkColor;
-  renderMarkerSheet();
+  const sp=document.getElementById('mkSg'+i);
+  if(sp)sp.style.background=mkSel[i]?MK_COLORS[mkSel[i]]:'';
 }
 async function makeMarkerCard(){
   const m=getMsgs(curTalk.id).find(x=>x.id===mkMsgId);if(!m)return;
@@ -1096,61 +1104,79 @@ async function makeMarkerCard(){
   }
   if(line.length)lines.push(line);
   const lineH=74;
-  const H=Math.max(760,430+lines.length*lineH+170);
-  cv.width=W;cv.height=H;
-  const c2=cv.getContext('2d');
-  const bg=c2.createLinearGradient(0,0,W*0.3,H);
-  bg.addColorStop(0,'#F4EDF0');bg.addColorStop(1,'#E9E4F1');
-  c2.fillStyle=bg;c2.fillRect(0,0,W,H);
-  c2.fillStyle='rgba(255,255,255,0.96)';
-  c2.shadowColor='rgba(43,39,51,0.12)';c2.shadowBlur=40;c2.shadowOffsetY=10;
-  c2.beginPath();c2.roundRect(60,70,W-120,H-140,44);c2.fill();
-  c2.shadowColor='transparent';
-  // ヘッダー（アイコン・名前・日付）
+  // ページ分割：スマホ縦画面比（9:16＝1080×1920）を超える長さなら複数枚に分ける
+  const MAXH=1920;
+  const perPageMax=Math.max(1,Math.floor((MAXH-430-170)/lineH));
+  const pageCount=Math.max(1,Math.ceil(lines.length/perPageMax));
+  const perPage=Math.ceil(lines.length/pageCount); // 枚数で均等割り（最後だけスカスカにならないように）
+  // アイコンは1回だけ読み込んで全ページで使い回す
   const av=c?await new Promise(res=>{if(!c.icon){res(null);return}const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=c.icon}):null;
-  const ax=140,ay=170,ar=52;
-  c2.save();c2.beginPath();c2.arc(ax,ay,ar,0,Math.PI*2);c2.clip();
-  if(av){const s0=Math.min(av.width,av.height);c2.drawImage(av,(av.width-s0)/2,(av.height-s0)/2,s0,s0,ax-ar,ay-ar,ar*2,ar*2)}
-  else{c2.fillStyle='#F5E4EA';c2.fillRect(ax-ar,ay-ar,ar*2,ar*2);c2.fillStyle='#9A4560';c2.font='700 48px sans-serif';c2.textAlign='center';c2.textBaseline='middle';c2.fillText(who[0],ax,ay+3);c2.textBaseline='alphabetic'}
-  c2.restore();
-  c2.strokeStyle='#F5E4EA';c2.lineWidth=5;
-  c2.beginPath();c2.arc(ax,ay,ar+3,0,Math.PI*2);c2.stroke();
-  c2.textAlign='left';c2.fillStyle='#2B2733';
-  c2.font='700 42px -apple-system,"Hiragino Sans",sans-serif';
-  c2.fillText(who,ax+ar+28,ay-2);
-  c2.fillStyle='#9A4560';c2.font='italic 400 28px Georgia,serif';
-  c2.fillText(new Date(m.ts).toLocaleString('ja-JP',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}),ax+ar+28,ay+40);
-  // 本文（マーカー付き）
-  let ty=310;
-  const tx=120;
-  c2.font=fontSpec;
-  for(const ln of lines){
-    // ハイライト帯
-    let x=tx;
-    for(const it of ln){
-      const w0=c2.measureText(it.ch).width;
-      if(it.cl){c2.fillStyle=MK_COLORS[it.cl];c2.fillRect(x-1,ty-44,w0+2,58)}
-      x+=w0;
+  const dateStr=new Date(m.ts).toLocaleString('ja-JP',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const blobs=[];
+  for(let p=0;p<pageCount;p++){
+    const pgLines=lines.slice(p*perPage,(p+1)*perPage);
+    const H=Math.max(760,430+pgLines.length*lineH+170);
+    const pcv=document.createElement('canvas');
+    pcv.width=W;pcv.height=H;
+    const c2=pcv.getContext('2d');
+    const bg=c2.createLinearGradient(0,0,W*0.3,H);
+    bg.addColorStop(0,'#F4EDF0');bg.addColorStop(1,'#E9E4F1');
+    c2.fillStyle=bg;c2.fillRect(0,0,W,H);
+    c2.fillStyle='rgba(255,255,255,0.96)';
+    c2.shadowColor='rgba(43,39,51,0.12)';c2.shadowBlur=40;c2.shadowOffsetY=10;
+    c2.beginPath();c2.roundRect(60,70,W-120,H-140,44);c2.fill();
+    c2.shadowColor='transparent';
+    // ヘッダー（アイコン・名前・日付）※全ページに描く
+    const ax=140,ay=170,ar=52;
+    c2.save();c2.beginPath();c2.arc(ax,ay,ar,0,Math.PI*2);c2.clip();
+    if(av){const s0=Math.min(av.width,av.height);c2.drawImage(av,(av.width-s0)/2,(av.height-s0)/2,s0,s0,ax-ar,ay-ar,ar*2,ar*2)}
+    else{c2.fillStyle='#F5E4EA';c2.fillRect(ax-ar,ay-ar,ar*2,ar*2);c2.fillStyle='#9A4560';c2.font='700 48px sans-serif';c2.textAlign='center';c2.textBaseline='middle';c2.fillText(who[0],ax,ay+3);c2.textBaseline='alphabetic'}
+    c2.restore();
+    c2.strokeStyle='#F5E4EA';c2.lineWidth=5;
+    c2.beginPath();c2.arc(ax,ay,ar+3,0,Math.PI*2);c2.stroke();
+    c2.textAlign='left';c2.fillStyle='#2B2733';
+    c2.font='700 42px -apple-system,"Hiragino Sans",sans-serif';
+    c2.fillText(who,ax+ar+28,ay-2);
+    c2.fillStyle='#9A4560';c2.font='italic 400 28px Georgia,serif';
+    c2.fillText(dateStr,ax+ar+28,ay+40);
+    // 本文（マーカー付き）
+    let ty=310;
+    const tx=120;
+    c2.font=fontSpec;
+    for(const ln of pgLines){
+      // ハイライト帯
+      let x=tx;
+      for(const it of ln){
+        const w0=c2.measureText(it.ch).width;
+        if(it.cl){c2.fillStyle=MK_COLORS[it.cl];c2.fillRect(x-1,ty-44,w0+2,58)}
+        x+=w0;
+      }
+      // 文字
+      x=tx;c2.fillStyle='#2B2733';
+      for(const it of ln){
+        c2.fillText(it.ch,x,ty);
+        x+=c2.measureText(it.ch).width;
+      }
+      ty+=lineH;
     }
-    // 文字
-    x=tx;c2.fillStyle='#2B2733';
-    for(const it of ln){
-      c2.fillText(it.ch,x,ty);
-      x+=c2.measureText(it.ch).width;
+    if(settings.cardBrand){
+      c2.textAlign='center';c2.fillStyle='#B25C77';c2.font='italic 400 28px Georgia,serif';
+      c2.fillText(settings.cardBrand,W/2,H-105);
     }
-    ty+=lineH;
+    if(pageCount>1){
+      c2.textAlign='right';c2.fillStyle='#B25C77';c2.font='italic 400 26px Georgia,serif';
+      c2.fillText((p+1)+' / '+pageCount,W-100,H-105);
+      c2.textAlign='left';
+    }
+    const blob=await new Promise(res=>pcv.toBlob(res,'image/png'));
+    if(blob)blobs.push(blob);
   }
-  if(settings.cardBrand){
-    c2.textAlign='center';c2.fillStyle='#B25C77';c2.font='italic 400 28px Georgia,serif';
-    c2.fillText(settings.cardBrand,W/2,H-105);
-  }
-  cv.toBlob(async blob=>{
-    try{
-      const file=new File([blob],'ログカード_'+who+'_'+new Date(m.ts).toISOString().slice(0,10)+'.png',{type:'image/png'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]})}
-      else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name;a.click()}
-    }catch(err){if(err.name!=='AbortError')showError(err)}
-  },'image/png');
+  const base='ログカード_'+who+'_'+new Date(m.ts).toISOString().slice(0,10);
+  const files=blobs.map((b,i)=>new File([b],base+(pageCount>1?'_'+(i+1):'')+'.png',{type:'image/png'}));
+  try{
+    if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files})}
+    else{files.forEach(f=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click()})}
+  }catch(err){if(err.name!=='AbortError')showError(err)}
 }
 function copyMsg(id){
   const m=getMsgs(curTalk.id).find(x=>x.id===id);
