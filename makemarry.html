@@ -342,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.5</div>
+      <div class="note">Makemarry v5.6</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -1681,7 +1681,8 @@ async function anthropicCall(model,system,messages,maxTokens){
   if(!settings.anthropicKey)throw new Error('AnthropicのAPIキーが未設定です');
   const body={model,max_tokens:maxTokens,messages:toAnthropicMsgs(messages)};
   if(settings.extThink&&model.startsWith('claude')&&!model.includes('haiku')){
-    body.thinking={type:'enabled',budget_tokens:2048};
+    body.thinking={type:'adaptive'};
+    body.output_config={effort:'high'};
     body.max_tokens=Math.max(maxTokens+2048,4096);
   }
   if(system)body.system=[{type:'text',text:system,cache_control:{type:'ephemeral'}}];
@@ -3111,6 +3112,14 @@ applyFont();
 updateSyncDot();
 renderTalks();
 mmShowWelcome();
+(async()=>{
+  try{
+    if(serverReadySafe()){
+      const sil=await serverFetch('/sil-shared');
+      if(Array.isArray(sil)){settings.silShared=sil;LS.set('mm_settings',settings)}
+    }
+  }catch(e){}
+})();
 renderSettings();
 updatePwaStatus();
 checkInbox();

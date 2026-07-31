@@ -490,7 +490,12 @@ function convoItemEl(c, roomLabel, snippet){
   div.className="convoItem"+(c.id===S.currentId?" cur":"");
   const name=document.createElement("div");
   name.className="name";
-  const t=document.createElement("div"); t.textContent=(c.pinned?"📌 ":"")+c.title;
+  let shownTitle=c.title;
+  if((!shownTitle||shownTitle==="新しい会話")&&c.messages.length){
+    const fm=c.messages.find(m=>m.role==="user"&&m.content);
+    if(fm)shownTitle=fm.content.slice(0,18)+(fm.content.length>18?"…":"");
+  }
+  const t=document.createElement("div"); t.textContent=(c.pinned?"📌 ":"")+shownTitle;
   name.append(t);
   if(snippet){ const sp=document.createElement("div"); sp.className="snip"; sp.textContent=snippet; name.append(sp); }
   const meta=document.createElement("div");
@@ -1814,7 +1819,7 @@ function openKnowledge(){
     if(act.dataset.act==="toggle"){
       const i=ids.indexOf(id);
       if(i>=0) ids.splice(i,1); else ids.push(id);
-      save(); openKnowledge();
+      save(); pushSilShared(); openKnowledge();
     }
     else if(act.dataset.act==="del"){
       if(confirm(`「${k.title}」を削除する？`)){
