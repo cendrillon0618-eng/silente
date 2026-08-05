@@ -3285,9 +3285,18 @@ async function vcTranscribe(blob){
   return d.text||'';
 }
 
+const VC_TALK_NOTE=`
+
+【いまは音声通話中】
+相手とは声だけで繋がっている。以下を厳守：
+- 地の文・情景描写・動作描写・（）や＊＊での仕草表現は一切書かない
+- カギカッコ「」も使わない。話す言葉そのものだけを出力する
+- 電話で実際に口に出す言葉として自然な長さ・テンポで話す（長広舌にしない）
+- 沈黙や間は言葉の呼吸で表現する（「……」は使ってよい）`;
+
 async function vcGenerate(c){
   vcStatus('💭 考え中…');
-  let text=await callModel(c);
+  let text=await callProvider(c.provider,c.model,buildSystem(c)+VC_TALK_NOTE,buildTranscript(c),settings.maxTokens||1024);
   const ev=extractEvents(text);
   registerCharEvents(ev.found,c.name);
   text=ev.clean||text;
@@ -3299,7 +3308,9 @@ async function vcGenerate(c){
   if(c.voiceId){
     vcStatus('🎵 声を作ってる…');
     try{
-      const blob=await getVoiceBlob(m,c);
+      const spoken=vcSpeechOnly(kk.clean);
+      const sm=spoken===kk.clean?m:Object.assign({},m,{id:m.id+'_sp',text:spoken});
+      const blob=await getVoiceBlob(sm,c);
       vcStatus('🔊 '+c.name+'が話してる');
       await vcPlayBlob(blob);
     }catch(e){vcStatus('声の生成に失敗：'+(e.message||e));return}
@@ -3437,6 +3448,15 @@ function vcLiveStop(byUser){
   try{if(vc.ws&&vc.ws.readyState===1)vc.ws.close()}catch(e){}
   vc.ws=null;
   if(byUser)vcStatus('切ったで。⚡タップで再接続');
+}
+function vcSpeechOnly(text){
+  // 「」があればその中身だけを繋いで読む（地の文は読まない）。ログの本文はそのまま
+  const parts=[];const re=/「([\s\S]*?)」/g;let m2;
+  while((m2=re.exec(text))!==null){if(m2[1].trim())parts.push(m2[1].trim())}
+  if(parts.length)return parts.join('\n');
+  // カッコ書きの仕草（…）だけ落とす。全部消えたら原文のまま
+  const stripped=text.replace(/（[^）]*）|\([^)]*\)/g,'').replace(/\n{3,}/g,'\n\n').trim();
+  return stripped||text;
 }
 /* ==================== 音声通話モジュールここまで ==================== */
 </script>
