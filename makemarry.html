@@ -342,7 +342,7 @@ img{display:block}
     <div class="settsec">
       <div class="sechead">診断</div>
       <div class="sheetitem" onclick="runDiag()"><span class="si">🩺</span>接続テストを実行</div>
-      <div class="note">Makemarry v5.6.1</div>
+      <div class="note">Makemarry v5.6.2</div>
     </div>
     <div class="settsec">
       <div class="sechead">使用量（このアプリからのAPI呼び出し）</div>
@@ -379,6 +379,7 @@ img{display:block}
     <div class="avatar sm" id="chatAvatar"></div>
     <span style="font-size:16px;font-weight:700" id="chatTitle"></span>
     <span class="spacer"></span>
+    <button class="iconbtn" id="voiceCallBtn" onclick="openVoiceCall()">📞</button>
     <button class="iconbtn" onclick="openChatMenu()">☰</button>
   </div>
   <div id="chatWall"></div>
@@ -583,6 +584,7 @@ function openCharEdit(id){
       <input type="text" id="ceModel" value="${c?esc(c.model):''}" placeholder="モデルIDを直接入力" style="margin-top:8px;display:none">
     </div>
     <div class="field"><label>Voice ID（ElevenLabsの声。空なら読み上げなし）</label><input type="text" id="ceVoice" value="${c&&c.voiceId?esc(c.voiceId):''}" placeholder="例: 21m00Tcm4TlvDq8ikWAM"></div>
+    <div class="field"><label>Agent ID（ElevenLabs Agentsのリアルタイム通話用。空ならしっかり通話のみ）</label><input type="text" id="ceAgent" value="${c&&c.agentId?esc(c.agentId):''}" placeholder="例: agent_xxxxxxxx"></div>
     <div class="field"><label>音声モデル</label>
       <select id="ceVoiceModel">
         <option value="eleven_multilingual_v2"${!c||!c.voiceModel||c.voiceModel==='eleven_multilingual_v2'?' selected':''}>Multilingual v2（安定・標準）</option>
@@ -703,6 +705,7 @@ function saveChar(id){
   const data={
     name, icon:editIcon,
     voiceId:document.getElementById('ceVoice').value.trim(),
+    agentId:document.getElementById('ceAgent').value.trim(),
     voiceModel:document.getElementById('ceVoiceModel').value,
     vStability:parseFloat(document.getElementById('ceStab').value),
     vStyle:parseFloat(document.getElementById('ceStyle').value),
@@ -1238,7 +1241,7 @@ function openInherit(){
   const others=talks.filter(t=>t.id!==curTalk.id);
   openSheet(`
     <div class="sheettitle">🔗 文脈の引き継ぎ</div>
-    <div class="note" style="margin-bottom:10px">選んだ部屋の「終わりの数通」を、この部屋の会話の前に生ログのまま差し込みます（画面には出ません）。新しい部屋でも声の温度と密度が最初から繋がります。</div>
+    <div class="note" style="margin-bottom:10px">選んだ部屋の「終わりの数通」を、この部屋の会話の前に生ログのまま差し込みます（画面には出ません）。<b>この部屋の会話が12通育つと自動で外れます</b>（それまでは1通ごとに引き継ぎ分のコストがかかります）。手動で「なし」にすればいつでも切れます。</div>
     <div class="field"><label>引き継ぎ元の部屋</label>
       <select id="ihFrom">
         <option value="">なし（引き継がない）</option>
@@ -1631,7 +1634,7 @@ function buildSystem(c){
 }
 function buildTranscript(c){
   let all=getMsgs(curTalk.id).slice(-(settings.histLimit||40));
-  if(curTalk.inheritFrom){
+  if(curTalk.inheritFrom && getMsgs(curTalk.id).length<12){
     const src=talks.find(t=>t.id===curTalk.inheritFrom);
     if(src){
       const prev=getMsgs(src.id).slice(-(curTalk.inheritN||10));
@@ -3150,6 +3153,292 @@ mmShowWelcome();
 renderSettings();
 updatePwaStatus();
 checkInbox();
+
+/* ==================== 📞 音声通話（増築モジュール） ====================
+   足すだけの独立モジュール。既存の保存処理（LS/saveMsgs等）は呼ぶだけで、
+   中身は一切変更していない。ログが消える経路はここには無い。 */
+let vc={open:false,mode:'a',rec:null,stream:null,chunks:[],busy:false,actx:null,
+        ws:null,proc:null,srcNode:null,playT:0,live:false,autoNext:false,char:null};
+
+function vcSupported(){return !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder)}
+
+function openVoiceCall(){
+  if(!curTalk){toast('トークを開いてください');return}
+  if(curTalk.type!=='dm'){toast('通話は個別トークのみ対応です');return}
+  const c=chars.find(x=>x.id===curTalk.charIds[0]);
+  if(!c){toast('キャラが見つかりません');return}
+  if(!settings.elevenKey){toast('ElevenLabsのキーが未設定です（設定→APIキー）');return}
+  if(!c.voiceId&&!c.agentId){toast(c.name+'のVoice IDが未設定です');return}
+  if(!vcSupported()){toast('この環境はマイク録音に対応していません');return}
+  vc.char=c;vc.open=true;vc.mode='a';vc.busy=false;vc.live=false;
+  buildVcOverlay(c);
+  // iOSの音声再生ロック解除（ユーザー操作の中でAudioContextを起こす）
+  try{
+    vc.actx=vc.actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(vc.actx.state==='suspended')vc.actx.resume();
+  }catch(e){}
+}
+
+function buildVcOverlay(c){
+  const old=document.getElementById('vcOverlay');if(old)old.remove();
+  const hasAgent=!!c.agentId;
+  const div=document.createElement('div');
+  div.id='vcOverlay';
+  div.style.cssText='position:fixed;inset:0;z-index:9999;background:linear-gradient(180deg,#0e1220,#1a1f33);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;color:#fff';
+  div.innerHTML=`
+    <div style="position:absolute;top:18px;left:0;right:0;text-align:center;font-size:13px;opacity:.7">音声通話</div>
+    ${hasAgent?`<div id="vcModeRow" style="display:flex;gap:8px;background:rgba(255,255,255,.08);border-radius:20px;padding:4px">
+      <button id="vcModeA" onclick="vcSetMode('a')" style="border:none;border-radius:16px;padding:7px 14px;font-size:13px;background:#5b6cff;color:#fff">🎙 しっかり</button>
+      <button id="vcModeB" onclick="vcSetMode('b')" style="border:none;border-radius:16px;padding:7px 14px;font-size:13px;background:transparent;color:#fff">⚡ リアルタイム</button>
+    </div>`:''}
+    <div style="width:110px;height:110px;border-radius:50%;overflow:hidden;box-shadow:0 0 0 4px rgba(255,255,255,.15)" id="vcAvatar"></div>
+    <div style="font-size:20px;font-weight:700">${esc(c.name)}</div>
+    <div id="vcStatus" style="font-size:14px;opacity:.85;min-height:20px">待機中</div>
+    <div id="vcCaption" style="font-size:13px;opacity:.6;min-height:36px;max-width:90%;text-align:center;line-height:1.5"></div>
+    <button id="vcMicBtn" onclick="vcMicTap()" style="width:84px;height:84px;border-radius:50%;border:none;background:#5b6cff;color:#fff;font-size:34px;box-shadow:0 6px 20px rgba(91,108,255,.5)">🎙</button>
+    <label style="font-size:13px;opacity:.8;display:flex;align-items:center;gap:6px"><input type="checkbox" id="vcAuto" onchange="vc.autoNext=this.checked">返事のあと自動でマイクON（しっかり通話）</label>
+    <button onclick="closeVoiceCall()" style="position:absolute;bottom:34px;width:64px;height:64px;border-radius:50%;border:none;background:#e5484d;color:#fff;font-size:26px">✕</button>`;
+  document.body.appendChild(div);
+  document.getElementById('vcAvatar').innerHTML=avatarHtml(c,'avatar');
+  const av=document.getElementById('vcAvatar').firstElementChild;
+  if(av){av.style.width='110px';av.style.height='110px';av.style.fontSize='44px'}
+}
+
+function vcSetMode(m){
+  if(vc.busy||vc.live){toast('通話中はモードを変えられません（一度✕で切ってください）');return}
+  vc.mode=m;
+  const a=document.getElementById('vcModeA'),b=document.getElementById('vcModeB');
+  if(a&&b){a.style.background=m==='a'?'#5b6cff':'transparent';b.style.background=m==='b'?'#5b6cff':'transparent'}
+  vcStatus(m==='a'?'待機中':'⚡タップで接続します');
+}
+function vcStatus(t){const el=document.getElementById('vcStatus');if(el)el.textContent=t}
+function vcCaption(t){const el=document.getElementById('vcCaption');if(el)el.textContent=t||''}
+function vcMicUI(on){const b=document.getElementById('vcMicBtn');if(b){b.style.background=on?'#e5484d':'#5b6cff';b.textContent=on?'⏹':'🎙'}}
+
+function closeVoiceCall(){
+  vc.open=false;
+  try{if(vc.rec&&vc.rec.state!=='inactive')vc.rec.stop()}catch(e){}
+  vcStopStream();vcLiveStop(false);
+  const o=document.getElementById('vcOverlay');if(o)o.remove();
+}
+function vcStopStream(){
+  try{if(vc.stream){vc.stream.getTracks().forEach(t=>t.stop());vc.stream=null}}catch(e){}
+}
+
+function vcMicTap(){
+  if(vc.mode==='b'){vcLiveTap();return}
+  if(vc.busy){toast('返事の生成中です');return}
+  if(vc.rec&&vc.rec.state==='recording'){vc.rec.stop();return}
+  vcRecStart();
+}
+
+/* ---------- ルートA：しっかり通話（録音→Scribe→キャラ→TTS） ---------- */
+async function vcRecStart(){
+  try{
+    vc.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+  }catch(e){toast('マイクを使えませんでした。ブラウザの許可を確認してください');return}
+  const mime=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4'
+            :(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'');
+  vc.chunks=[];
+  vc.rec=mime?new MediaRecorder(vc.stream,{mimeType:mime}):new MediaRecorder(vc.stream);
+  vc.rec.ondataavailable=e=>{if(e.data&&e.data.size)vc.chunks.push(e.data)};
+  vc.rec.onstop=()=>{vcStopStream();vcMicUI(false);vcRecDone()};
+  vc.rec.start();
+  vcMicUI(true);vcStatus('🎙 聞いてるで（もう一度タップで送信）');vcCaption('');
+}
+
+async function vcRecDone(){
+  if(!vc.open)return;
+  const blob=new Blob(vc.chunks,{type:vc.rec.mimeType||'audio/mp4'});
+  vc.chunks=[];
+  if(blob.size<2000){vcStatus('短すぎて聞き取れませんでした');return}
+  vc.busy=true;vcStatus('👂 文字起こし中…');
+  try{
+    const text=await vcTranscribe(blob);
+    if(!text||!text.trim()){vcStatus('聞き取れませんでした。もう一度どうぞ');vc.busy=false;return}
+    vcCaption('「'+text+'」');
+    // 既存の保存経路（pushMsg）をそのまま使う＝ログに残る
+    const m={id:uid(),role:'user',text:text.trim(),ts:Date.now(),viaVoice:true};
+    pushMsg(m);appendMsgEl(m);
+    await vcGenerate(vc.char);
+  }catch(e){
+    vcStatus('エラー：'+(e.message||e));
+  }
+  vc.busy=false;
+  if(vc.open&&vc.autoNext&&vc.mode==='a'){setTimeout(()=>{if(vc.open&&!vc.busy&&vc.mode==='a')vcRecStart()},400)}
+}
+
+async function vcTranscribe(blob){
+  const fd=new FormData();
+  fd.append('model_id','scribe_v1');
+  fd.append('file',blob,'voice.'+(blob.type.includes('mp4')?'m4a':'webm'));
+  fd.append('language_code','ja');
+  fd.append('tag_audio_events','false');
+  const res=await fetchT('https://api.elevenlabs.io/v1/speech-to-text',{
+    method:'POST',headers:{'xi-api-key':settings.elevenKey},body:fd},60000);
+  if(!res.ok){
+    let msg='文字起こし HTTP '+res.status;
+    try{const d=await res.json();msg=d.detail?(d.detail.message||JSON.stringify(d.detail)):msg}catch(e){}
+    throw new Error(msg);
+  }
+  const d=await res.json();
+  return d.text||'';
+}
+
+async function vcGenerate(c){
+  vcStatus('💭 考え中…');
+  let text=await callModel(c);
+  const ev=extractEvents(text);
+  registerCharEvents(ev.found,c.name);
+  text=ev.clean||text;
+  const kk=extractKokoro(text);
+  const m={id:uid(),role:'char',charId:c.id,text:kk.clean,think:kk.think,ts:Date.now(),viaVoice:true};
+  pushMsg(m);appendMsgEl(m);
+  maybeAutoCompact();
+  vcCaption(kk.clean.length>120?kk.clean.slice(0,120)+'…':kk.clean);
+  if(c.voiceId){
+    vcStatus('🎵 声を作ってる…');
+    try{
+      const blob=await getVoiceBlob(m,c);
+      vcStatus('🔊 '+c.name+'が話してる');
+      await vcPlayBlob(blob);
+    }catch(e){vcStatus('声の生成に失敗：'+(e.message||e));return}
+  }
+  vcStatus(vc.autoNext?'すぐマイクONになるで':'タップして話してな');
+}
+
+async function vcPlayBlob(blob){
+  // iOSでも確実に鳴るようAudioContextで再生（openVoiceCallのタップで解錠済み）
+  try{
+    const buf=await blob.arrayBuffer();
+    const audio=await vc.actx.decodeAudioData(buf);
+    return new Promise(res=>{
+      const s=vc.actx.createBufferSource();
+      s.buffer=audio;s.connect(vc.actx.destination);
+      s.onended=res;s.start();
+    });
+  }catch(e){
+    // 保険：通常のAudio再生
+    return new Promise(res=>{
+      const a=new Audio(URL.createObjectURL(blob));
+      a.onended=res;a.onerror=res;a.play().catch(res);
+    });
+  }
+}
+
+/* ---------- ルートB：リアルタイム通話（ElevenLabs Agents WebSocket） ---------- */
+async function vcLiveTap(){
+  if(vc.live){vcLiveStop(true);return}
+  const c=vc.char;
+  if(!c.agentId){toast('この子のAgent IDが未設定です（キャラ編集で設定）');return}
+  vcStatus('⚡ 接続中…');
+  let url='wss://api.elevenlabs.io/v1/convai/conversation?agent_id='+encodeURIComponent(c.agentId);
+  // 非公開エージェント用の署名付きURLを試す（公開エージェントなら素のURLで通る）
+  try{
+    const r=await fetchT('https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id='+encodeURIComponent(c.agentId),
+      {headers:{'xi-api-key':settings.elevenKey}},15000);
+    if(r.ok){const d=await r.json();if(d.signed_url)url=d.signed_url}
+  }catch(e){/* 素のURLで続行 */}
+  try{
+    vc.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+  }catch(e){toast('マイクを使えませんでした');vcStatus('待機中');return}
+  const ws=new WebSocket(url);
+  vc.ws=ws;
+  ws.onopen=()=>{
+    vc.live=true;vcMicUI(true);vcStatus('⚡ 繋がった。話してええで');
+    vcLiveMicStart();
+  };
+  ws.onmessage=ev=>{
+    let msg;try{msg=JSON.parse(ev.data)}catch(e){return}
+    if(msg.type==='ping'){
+      ws.send(JSON.stringify({type:'pong',event_id:msg.ping_event&&msg.ping_event.event_id}));
+    }else if(msg.type==='audio'&&msg.audio_event){
+      vcLivePlay(msg.audio_event.audio_base_64);
+    }else if(msg.type==='user_transcript'&&msg.user_transcription_event){
+      const t=msg.user_transcription_event.user_transcript;
+      if(t&&t.trim()){
+        vcCaption('「'+t+'」');
+        const m={id:uid(),role:'user',text:t.trim(),ts:Date.now(),viaVoice:true};
+        pushMsg(m);appendMsgEl(m);
+      }
+    }else if(msg.type==='agent_response'&&msg.agent_response_event){
+      const t=msg.agent_response_event.agent_response;
+      if(t&&t.trim()){
+        vcCaption(t.length>120?t.slice(0,120)+'…':t);
+        const m={id:uid(),role:'char',charId:vc.char.id,text:t.trim(),ts:Date.now(),viaVoice:true};
+        pushMsg(m);appendMsgEl(m);
+      }
+    }else if(msg.type==='interruption'){
+      (vc.q||[]).forEach(s=>{try{s.stop()}catch(e){}});vc.q=[];
+      vc.playT=vc.actx?vc.actx.currentTime:0;
+    }
+  };
+  ws.onerror=()=>{vcStatus('接続エラー。Agent IDとプランを確認してな')};
+  ws.onclose=()=>{if(vc.live)vcLiveStop(false);vcStatus('切断されました')};
+}
+
+function vcLiveMicStart(){
+  const actx=vc.actx;
+  const srcRate=actx.sampleRate;
+  vc.srcNode=actx.createMediaStreamSource(vc.stream);
+  vc.proc=actx.createScriptProcessor(4096,1,1);
+  vc.srcNode.connect(vc.proc);
+  vc.mute=actx.createGain();vc.mute.gain.value=0; // iOSではprocessorを出力に繋がないと発火しないため、音量0で接続
+  vc.proc.connect(vc.mute);vc.mute.connect(actx.destination);
+  vc.playT=actx.currentTime;
+  vc.proc.onaudioprocess=e=>{
+    if(!vc.live||!vc.ws||vc.ws.readyState!==1)return;
+    const inp=e.inputBuffer.getChannelData(0);
+    // 端末レート→16kHzへ間引き
+    const ratio=srcRate/16000;
+    const outLen=Math.floor(inp.length/ratio);
+    const pcm=new Int16Array(outLen);
+    for(let i=0;i<outLen;i++){
+      let s=inp[Math.floor(i*ratio)];
+      s=Math.max(-1,Math.min(1,s));
+      pcm[i]=s<0?s*0x8000:s*0x7FFF;
+    }
+    const bytes=new Uint8Array(pcm.buffer);
+    let bin='';const CH=8192;
+    for(let i=0;i<bytes.length;i+=CH)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+    vc.ws.send(JSON.stringify({user_audio_chunk:btoa(bin)}));
+  };
+}
+
+function vcLivePlay(b64){
+  // 受信はPCM 16bit/16kHz mono。デコードしてキュー再生（隙間なく連結）
+  try{
+    const bin=atob(b64);
+    const n=bin.length/2;
+    const buf=vc.actx.createBuffer(1,n,16000);
+    const ch=buf.getChannelData(0);
+    for(let i=0;i<n;i++){
+      const lo=bin.charCodeAt(i*2),hi=bin.charCodeAt(i*2+1);
+      let v=(hi<<8)|lo;if(v>=0x8000)v-=0x10000;
+      ch[i]=v/0x8000;
+    }
+    const s=vc.actx.createBufferSource();
+    s.buffer=buf;s.connect(vc.actx.destination);
+    const t=Math.max(vc.actx.currentTime,vc.playT||0);
+    s.onended=()=>{vc.q=(vc.q||[]).filter(x=>x!==s)};
+    (vc.q=vc.q||[]).push(s);
+    s.start(t);
+    vc.playT=t+buf.duration;
+  }catch(e){}
+}
+
+function vcLiveStop(byUser){
+  vc.live=false;vcMicUI(false);
+  (vc.q||[]).forEach(s=>{try{s.stop()}catch(e){}});vc.q=[];
+  try{if(vc.mute){vc.mute.disconnect();vc.mute=null}}catch(e){}
+  try{if(vc.proc){vc.proc.disconnect();vc.proc.onaudioprocess=null;vc.proc=null}}catch(e){}
+  try{if(vc.srcNode){vc.srcNode.disconnect();vc.srcNode=null}}catch(e){}
+  vcStopStream();
+  try{if(vc.ws&&vc.ws.readyState===1)vc.ws.close()}catch(e){}
+  vc.ws=null;
+  if(byUser)vcStatus('切ったで。⚡タップで再接続');
+}
+/* ==================== 音声通話モジュールここまで ==================== */
 </script>
 </body>
 </html>
